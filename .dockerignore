@@ -1,0 +1,17 @@
+# Ignore local node_modules
+**/node_modules
+frontend/node_modules
+backend/node_modules
+node_modules/
+
+# Ignore local builds and dist
+frontend/dist
+backend/public
+
+# Ignore git and config
+.git
+.gitignore
+.env
+.env.local
+cors-config.json
+Dockerfile
