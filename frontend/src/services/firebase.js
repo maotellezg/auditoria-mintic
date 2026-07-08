@@ -4,12 +4,12 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'auditoria-mintc.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'auditoria-mintc',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'auditoria-mintc.appspot.com',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '965535590033',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: "AIzaSyCLdoKSGI4lszq2Nr__kUKZVS8i3vKaoYE",
+  authDomain: "auditoria-mintc.firebaseapp.com",
+  projectId: "auditoria-mintc",
+  storageBucket: "auditoria-mintc.firebasestorage.app",
+  messagingSenderId: "965535590033",
+  appId: "1:965535590033:web:5b0b81642404e4001d4130"
 };
 
 const app = initializeApp(firebaseConfig);
