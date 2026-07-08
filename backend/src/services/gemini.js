@@ -4,39 +4,32 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Inicializar Vertex AI
 const projectId = process.env.GCP_PROJECT_ID || 'auditoria-mintc';
-const location = process.env.GCP_LOCATION || 'us-central1';
+const location  = process.env.GCP_LOCATION  || 'us-central1';
 
-const vertexAI = new VertexAI({
-  project: projectId,
-  location: location
-});
+const vertexAI = new VertexAI({ project: projectId, location });
 
-// Los modelos se instancian dinámicamente con un sistema de fallback asíncrono para garantizar alta disponibilidad.
+// ─── Entidades del ecosistema MinTic ────────────────────────────────────────
+const ENTIDADES_MINTIC = [
+  'MinTIC',
+  'ANE',
+  'CRC',
+  'AND',
+  'FUTIC',
+  'RTVC',
+  'Servicios Postales Nacionales (4-72)',
+  'Persona Natural',
+  'Empresa Privada',
+  'Otro'
+];
 
-/**
- * Convierte un buffer de archivo en el formato inlineData que requiere Gemini
- * @param {Buffer} buffer - El buffer del archivo
- * @param {string} mimeType - El tipo MIME del archivo
- */
 function fileToGenerativePart(buffer, mimeType) {
-  return {
-    inlineData: {
-      data: buffer.toString('base64'),
-      mimeType: mimeType
-    }
-  };
+  return { inlineData: { data: buffer.toString('base64'), mimeType } };
 }
 
-/**
- * Extrae texto de un archivo Word (.docx)
- * @param {Buffer} buffer - Buffer del archivo .docx
- * @returns {Promise<string>} Texto extraído
- */
 async function extractTextFromWord(buffer) {
   try {
-    const result = await mammoth.extractRawText({ buffer: buffer });
+    const result = await mammoth.extractRawText({ buffer });
     return result.value || '';
   } catch (error) {
     console.error('Error al extraer texto del archivo Word:', error);
@@ -44,140 +37,139 @@ async function extractTextFromWord(buffer) {
   }
 }
 
-/**
- * Función auxiliar para extraer el texto de la respuesta de Gemini de forma 100% robusta,
- * soportando tanto propiedades directas, funciones, como la estructura anidada de candidates de Vertex AI legacy.
- * @param {Object} response - Objeto de respuesta de Vertex AI
- * @returns {string} Texto extraído de la respuesta
- */
 function extractTextFromResponse(response) {
   if (!response) return '';
-  
-  // 1. Intentar la estructura anidada legacy de @google-cloud/vertexai (candidates)
   try {
-    const candidateText = response.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (candidateText && typeof candidateText === 'string') {
-      return candidateText;
-    }
-  } catch (e) {
-    console.warn('Fallo al intentar extraer texto de candidates:', e.message);
-  }
-
-  // 2. Intentar llamar a .text() como función (común en algunas versiones del SDK)
+    const t = response.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (t && typeof t === 'string') return t;
+  } catch (e) {}
   try {
-    if (typeof response.text === 'function') {
-      return response.text();
-    }
-  } catch (e) {
-    console.warn('Fallo al intentar llamar a response.text():', e.message);
-  }
-
-  // 3. Intentar acceder a .text como propiedad (SDK unificado)
+    if (typeof response.text === 'function') return response.text();
+  } catch (e) {}
   try {
-    if (response.text && typeof response.text === 'string') {
-      return response.text;
-    }
-  } catch (e) {
-    console.warn('Fallo al intentar acceder a response.text:', e.message);
-  }
-
-  // 4. Fallback si es un string directo o si viene stringificado
+    if (response.text && typeof response.text === 'string') return response.text;
+  } catch (e) {}
   try {
     if (typeof response === 'string') {
-      const parsed = JSON.parse(response);
-      const txt = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (txt) return txt;
+      const p = JSON.parse(response);
+      const t2 = p.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (t2) return t2;
     }
   } catch (e) {}
-
   return '';
 }
 
 /**
- * Analiza un documento (PDF, Imagen o Word) usando Gemini y Vertex AI.
- * @param {Buffer} fileBuffer - Buffer del archivo
- * @param {string} filename - Nombre original del archivo
- * @param {string} mimeType - Tipo MIME del archivo
- * @returns {Promise<Object>} Metadatos y resumen estructurados en JSON
+ * Analiza un documento usando Gemini, especializado en auditoría MinTic colombiana.
  */
 export async function analyzeDocument(fileBuffer, filename, mimeType, gcsPath = null) {
-  console.log(`Iniciando análisis inteligente de: ${filename} (MIME: ${mimeType})`);
+  console.log(`Iniciando análisis MinTic de: ${filename} (MIME: ${mimeType})`);
 
   let parts = [];
   let fileTypeDescription = '';
 
-  // Determinar cómo procesar según el tipo MIME
   if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-    // Si es Word, extraemos texto primero y lo pasamos como prompt
-    console.log('Detectado archivo Word (.docx). Extrayendo texto...');
     const extractedText = await extractTextFromWord(fileBuffer);
-    parts.push({ text: `CONTENIDO DEL DOCUMENTO WORD EXTRAÍDO:\n\n${extractedText}` });
+    parts.push({ text: `CONTENIDO DEL DOCUMENTO WORD EXTRAIDO:\n\n${extractedText}` });
     fileTypeDescription = 'Word (.docx)';
   } else if (mimeType === 'application/pdf' || mimeType.startsWith('image/')) {
-    // PDFs e Imágenes son soportados de forma nativa por Gemini
     if (gcsPath) {
-      const bucketName = process.env.GCP_STORAGE_BUCKET || 'auditoria-mintc';
+      const bucketName = process.env.GCP_STORAGE_BUCKET || 'auditoria-mintc-storage';
       const gcsUri = `gs://${bucketName}/${gcsPath}`;
-      console.log(`Detectado archivo nativo multimedia (${mimeType}). Usando URI directa de GCS: ${gcsUri}`);
-      parts.push({
-        fileData: {
-          fileUri: gcsUri,
-          mimeType: mimeType
-        }
-      });
+      console.log(`Usando URI GCS: ${gcsUri}`);
+      parts.push({ fileData: { fileUri: gcsUri, mimeType } });
     } else {
-      console.log(`Detectado archivo nativo multimedia (${mimeType}) sin gcsPath. Preparando inlineData...`);
-      const filePart = fileToGenerativePart(fileBuffer, mimeType);
-      parts.push(filePart);
+      parts.push(fileToGenerativePart(fileBuffer, mimeType));
     }
     fileTypeDescription = mimeType === 'application/pdf' ? 'PDF' : 'Imagen';
   } else {
-    // Por si acaso, intentamos extraer texto simple o asumimos texto si no es soportado nativamente
-    const textDecoder = new TextDecoder('utf-8');
-    const textContent = textDecoder.decode(fileBuffer).slice(0, 100000); // Límite razonable
-    parts.push({ text: `CONTENIDO DEL DOCUMENTO EXTRAÍDO:\n\n${textContent}` });
-    fileTypeDescription = 'Texto/Desconocido';
+    const textContent = new TextDecoder('utf-8').decode(fileBuffer).slice(0, 100000);
+    parts.push({ text: `CONTENIDO DEL DOCUMENTO:\n\n${textContent}` });
+    fileTypeDescription = 'Texto';
   }
 
-  // El Prompt del Sistema para Gemini adaptado a la ANLA colombiana
+  // ─── PROMPT ESPECIALIZADO EN AUDITORIA MINTIC ───────────────────────────
   const promptText = `
-Eres un analista experto de la MinTic (Ministerio de Tecnologias de la Informacion y las Comunicaciones).
-Tu tarea es analizar el documento adjunto (que es de tipo ${fileTypeDescription} y se llama "${filename}") y extraer información estructurada en formato JSON estricto.
+Eres un auditor experto del sector TIC colombiano con amplio conocimiento del ecosistema del
+Ministerio de Tecnologias de la Informacion y las Comunicaciones (MinTIC) de Colombia.
 
-Debes clasificar e identificar todas las entidades posibles y generar un resumen ejecutivo.
+Tu tarea es analizar el documento adjunto (tipo: ${fileTypeDescription}, nombre: "${filename}")
+y extraer informacion estructurada para una plataforma de AUDITORIA GUBERNAMENTAL.
 
-El JSON retornado debe tener EXACTAMENTE las siguientes propiedades de tipo String, Array o Número, según corresponda:
+El documento puede ser: contratos, declaraciones de renta, resoluciones, convenios, actas,
+licitaciones, certificaciones, informes, o cualquier documento del sector TIC colombiano.
+
+Entidades del ecosistema MinTic a reconocer:
+- MinTIC: Ministerio de Tecnologias de la Informacion y las Comunicaciones
+- ANE: Agencia Nacional del Espectro
+- CRC: Comision de Regulacion de Comunicaciones
+- AND: Agencia Nacional Digital
+- FUTIC: Fondo Unico de Tecnologias de la Informacion y las Comunicaciones
+- RTVC: Sistema de Medios Publicos
+- Servicios Postales Nacionales (4-72)
+- Persona Natural: cuando el documento es de/para una persona natural (declaraciones de renta, etc.)
+- Empresa Privada: empresa privada del sector TIC
+- Otro: si no corresponde a ninguna de las anteriores
+
+Retorna UNICAMENTE un JSON valido con EXACTAMENTE esta estructura. Sin markdown, sin bloques de codigo:
 
 {
-  "institution": "La entidad de origen o institución del documento. DEBE SER EXACTAMENTE UNO DE LOS SIGUIENTES: 'ANLA', 'Ministerio de Ambiente'. Si el documento es emitido por el Ministerio, pon 'Ministerio de Ambiente'; si es por la Autoridad Nacional de Licencias Ambientales o autos, resoluciones de trámites de licencias, pon 'ANLA'",
-  "documentType": "El tipo de trámite o documento. Debe ser uno de los siguientes: 'Licencia', 'Sanción', 'Resolución', 'Auto de Inicio', 'Concepto Técnico', 'PQRS', 'Documento Público', 'Otro'",
-  "sector": "El sector industrial del documento. DEBE SER EXACTAMENTE UNO DE LOS SIGUIENTES: 'HIDROCARBUROS', 'MINERIA', 'INFRAESTRUCTURA', 'ENERGIA', 'AGROQUIMICOS', 'OTRO'",
-  "company": "Nombre de la empresa o solicitante (ej: EPM, Ecopetrol, Cerrejón, etc.). Si no aplica o no se menciona, pon 'No especificado'",
-  "region": "La región o territorio general de Colombia donde aplica (ej: Región Andina, Región Caribe, etc.) o Corporación Autónoma Regional (ej: Corantioquia, Cornare, etc.)",
-  "departamento": "Departamento de Colombia (ej: Antioquia, Bolívar, etc.). Si hay varios, sepáralos por comas o pon 'Nacional'",
-  "municipio": "Municipio(s) involucrado(s). Si no hay, pon 'No especificado'",
-  "expediente": "Número de expediente, código de radicado o número de resolución si se encuentra (ej: LAV0123-00-19, Radicado 202612345). Si no hay, pon 'No especificado'",
-  "date": "Fecha principal del documento en formato YYYY-MM-DD. Si no se encuentra, estima la fecha aproximada o pon 'No especificada'",
-  "importantDates": [
-    { "date": "YYYY-MM-DD", "context": "Contexto de la fecha (ej: Fecha de notificación, fecha del hecho sancionable, fecha de recurso, etc.)" }
+  "entidad": "Una de las 10 entidades listadas arriba. OBLIGATORIO.",
+  "tipoDocumento": "Uno de: Contrato, Declaracion de Renta, Resolucion, Convenio, Acta, Licitacion, Certificacion, Informe, PQRS, Otro",
+  "numeroDocumento": "Numero de contrato, radicado, expediente o referencia del documento. Si no hay, 'No especificado'",
+  "fechaDocumento": "Fecha principal en formato YYYY-MM-DD. Si no hay, 'No especificada'",
+  "fechasImportantes": [
+    { "fecha": "YYYY-MM-DD", "contexto": "Que representa esta fecha (ej: Fecha de firma, Fecha de vencimiento, Plazo de ejecucion)" }
   ],
-  "signatories": [
-    { "name": "Nombre completo de la persona que firma", "role": "Cargo o rol (ej: Director, Subdirector, Coordinador, etc.)" }
+  "valorContrato": "Valor economico del documento en pesos colombianos. Incluir el numero completo (ej: '$1.500.000.000 COP'). Si no aplica, 'No aplica'",
+  "objetoContrato": "Objeto, proposito o descripcion principal del documento. Maximo 3 lineas.",
+  "contratista": "Nombre completo de la empresa o persona contratada o que presenta el documento. Si no aplica, 'No especificado'",
+  "supervisor": "Nombre del supervisor o interventor del contrato si lo hay. Si no hay, 'No especificado'",
+  "personas": [
+    {
+      "nombre": "Nombre completo de la persona",
+      "cedula": "Numero de cedula o NIT si aparece. Si no hay, 'No especificado'",
+      "cargo": "Cargo o titulo de la persona",
+      "rol": "Rol en el documento: Firmante, Representante Legal, Contratista, Supervisor, Beneficiario, Declarante, Testigo, Otro",
+      "entidadPersona": "Entidad u organizacion a la que pertenece esta persona"
+    }
   ],
-  "summary": "Resumen ejecutivo detallado del documento. Debe ser claro, profesional y estructurado en 2 o 3 párrafos cortos explicando el objetivo, las decisiones y las conclusiones principales del documento.",
-  "relevantData": [
-    "Cualquier otro dato cuantitativo o cualitativo de alta relevancia o cifras clave (ej: 'Multa de $150.000.000 COP', 'Afectación a la cuenca del Río Sogamoso', 'Volumen de vertimiento autorizado', etc.)"
+  "firmantes": [
+    { "nombre": "Nombre completo", "cargo": "Cargo", "entidadFirmante": "Entidad que representa" }
   ],
-  "keyThemes": ["Arreglo de palabras clave o temas del documento (ej: 'Licencia', 'Monitoreo de Aguas', 'Sanción por Vertimientos', 'Energía Solar')", "máximo 5 tags"],
-  "wikiKeywords": ["Palabras clave específicas para crear interconexiones en una Wiki. Deben ser conceptos técnicos, nombres de cuencas, veredas, o términos legales recurrentes que sirvan para vincular este documento con otros en una red de conocimiento (ej: 'Río Cauca', 'PMA', 'Vertimientos', 'Deforestación')", "máximo 6 palabras"],
-  "status": "Siempre retorna 'Analizado'"
+  "alertas": [
+    "Lista de posibles puntos de atencion para el auditor. Ej: 'Valor del contrato superior al umbral de licitacion', 'Plazo de ejecucion vencido', 'Falta firma del supervisor', 'Inconsistencia en fechas'"
+  ],
+  "resumen": "Resumen ejecutivo del documento para el auditor. Minimo 3 parrafos: 1) De que trata el documento, 2) Partes involucradas y sus roles, 3) Aspectos financieros y juridicos relevantes.",
+  "datosRelevantes": [
+    "Dato cuantitativo o hecho juridico importante (ej: 'Plazo de ejecucion: 12 meses', 'Garantia del 10%', 'CDP No. 2024-1234')"
+  ],
+  "temasClave": ["Maximo 5 temas o tags del documento (ej: 'Conectividad', 'Infraestructura TIC', 'Espectro Radioelectrico')"],
+  "wikiKeywords": ["Maximo 6 palabras clave para interconectar este documento con otros en la Wiki (ej: 'MinTIC', 'Contrato', nombre de persona clave)"],
+  "institution": "Mismo valor que entidad (para compatibilidad)",
+  "documentType": "Mismo valor que tipoDocumento (para compatibilidad)",
+  "sector": "Sector TIC especifico: CONECTIVIDAD, ESPECTRO, POSTAL, REGULACION, MEDIOS, GOBIERNO_DIGITAL, OTRO",
+  "company": "Mismo valor que contratista (para compatibilidad)",
+  "expediente": "Mismo valor que numeroDocumento (para compatibilidad)",
+  "date": "Mismo valor que fechaDocumento (para compatibilidad)",
+  "importantDates": [],
+  "signatories": [],
+  "summary": "Mismo valor que resumen (para compatibilidad)",
+  "relevantData": [],
+  "keyThemes": [],
+  "region": "Region de Colombia si aplica, o 'Nacional'",
+  "departamento": "Departamento de Colombia si aplica, o 'Nacional'",
+  "municipio": "Municipio si aplica, o 'No especificado'",
+  "status": "Analizado"
 }
 
-Instrucciones Críticas:
-1. No inventes datos. Si no encuentras alguna propiedad, pon 'No especificado' o un arreglo vacío [] según corresponda.
-2. El resumen debe estar en español formal y ser muy útil para un tomador de decisiones.
-3. Asegúrate de retornar ÚNICAMENTE el código JSON válido. Sin markdown adicional (no agregues \`\`\`json ni nada de eso). Si la respuesta no es un JSON perfecto, el sistema fallará.
-4. IMPORTANTE: Escapa correctamente cualquier comilla doble interna (usa \\\" en tus textos de resumen o campos) y cualquier carácter de control especial en tus textos (como saltos de línea internos, usa \\n) para que el JSON sea 100% válido y nunca rompa el parser JSON. No retornes saltos de línea literales (crudos) dentro de los strings del JSON.
+Instrucciones criticas:
+1. NUNCA inventes datos. Si no encuentras algo, usa 'No especificado' o [].
+2. El campo personas[] debe incluir A TODAS las personas mencionadas en el documento, incluyendo las que solo aparecen como referencias.
+3. El campo alertas[] es MUY IMPORTANTE para el auditor. Se creativo y critico identificando posibles problemas.
+4. Retorna SOLO el JSON. Sin texto adicional, sin markdown, sin bloques de codigo.
+5. Escapa correctamente las comillas internas con \\\" y los saltos de linea con \\n.
+6. El JSON debe ser 100% valido y parseable.
 `;
 
   parts.push({ text: promptText });
@@ -200,198 +192,138 @@ Instrucciones Críticas:
 
   for (const candidate of candidateModels) {
     try {
-      console.log(`Intentando analizar documento con modelo Vertex AI: ${candidate}...`);
+      console.log(`Intentando modelo: ${candidate}...`);
       const modelInstance = vertexAI.getGenerativeModel({
         model: candidate,
-        generationConfig: {
-          responseMimeType: 'application/json',
-        }
+        generationConfig: { responseMimeType: 'application/json' }
       });
-
       const result = await modelInstance.generateContent({
-        contents: [{ role: 'user', parts: parts }]
+        contents: [{ role: 'user', parts }]
       });
-
       const response = await result.response;
       text = extractTextFromResponse(response);
-      console.log(`✅ Análisis exitoso usando modelo: ${candidate}`);
+      console.log(`Analisis exitoso con modelo: ${candidate}`);
       lastError = null;
       chosenModel = candidate;
       responseMetadata = response.usageMetadata || null;
       break;
     } catch (err) {
-      console.warn(`⚠️ Error usando modelo ${candidate}: ${err.message}`);
+      console.warn(`Error con modelo ${candidate}: ${err.message}`);
       lastError = err;
-      
       const errMsg = err.message || '';
       if (errMsg.includes('400') || errMsg.includes('INVALID_ARGUMENT') || errMsg.includes('page limit') || errMsg.includes('limit of 1000')) {
-        console.warn(`🛑 Detectado error de validación o límite de páginas de Vertex AI. Abortando búsqueda secuencial de modelos para conservar el mensaje de error de validación exacto.`);
         break;
       }
     }
   }
 
-  if (lastError) {
-    console.error('❌ Todos los modelos de Gemini fallaron en Vertex AI.');
-    throw lastError;
-  }
+  if (lastError) throw lastError;
+
+  // ─── PARSEO RESILIENTE ──────────────────────────────────────────────────
+  const parseResilient = (rawText) => {
+    let cleanText = rawText.trim();
+    try { return JSON.parse(cleanText); } catch (e) {}
+    let stripped = cleanText.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+    try { return JSON.parse(stripped); } catch (e) {}
+    const firstBrace = cleanText.indexOf('{');
+    const lastBrace  = cleanText.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      const cand = cleanText.substring(firstBrace, lastBrace + 1);
+      try { return JSON.parse(cand); } catch (e) {
+        try {
+          let sanitized = '';
+          let insideQuote = false;
+          let escaped = false;
+          for (let i = 0; i < cand.length; i++) {
+            const char = cand[i];
+            if (char === '"' && !escaped) { insideQuote = !insideQuote; sanitized += char; }
+            else if (char === '\\' && insideQuote) { escaped = !escaped; sanitized += char; }
+            else {
+              escaped = false;
+              if (insideQuote) {
+                if (char === '\n') sanitized += '\\n';
+                else if (char === '\r') sanitized += '\\r';
+                else if (char === '\t') sanitized += '\\t';
+                else sanitized += char;
+              } else { sanitized += char; }
+            }
+          }
+          return JSON.parse(sanitized);
+        } catch (se) { console.warn('Sanitizacion fallo:', se.message); }
+      }
+    }
+    throw new Error('Todas las estrategias de parseo fallaron.');
+  };
+
+  const durationMs = Date.now() - startTime;
+  const promptTokens = responseMetadata?.promptTokenCount || 0;
+  const candidatesTokens = responseMetadata?.candidatesTokenCount || 0;
+  const totalTokens = responseMetadata?.totalTokenCount || (promptTokens + candidatesTokens);
 
   try {
-    console.log('Respuesta recibida de Gemini. Iniciando parseo resiliente...');
-    
-    // Función auxiliar para intentar parsear con diferentes estrategias de limpieza
-    const parseResilient = (rawText) => {
-      let cleanText = rawText.trim();
-      
-      // Stage 1: Intento directo
-      try {
-        return JSON.parse(cleanText);
-      } catch (e) {
-        console.warn('Estrategia 1 (JSON.parse directo) falló.');
-      }
-      
-      // Stage 2: Limpieza de bloques de código markdown
-      let stripped = cleanText
-        .replace(/^```json\s*/i, '')
-        .replace(/```\s*$/, '')
-        .trim();
-      try {
-        return JSON.parse(stripped);
-      } catch (e) {
-        console.warn('Estrategia 2 (Limpieza de markdown) falló.');
-      }
-      
-      // Stage 3: Extraer lo que está estrictamente entre la primera llave { y la última llave }
-      const firstBrace = cleanText.indexOf('{');
-      const lastBrace = cleanText.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        const candidate = cleanText.substring(firstBrace, lastBrace + 1);
-        try {
-          return JSON.parse(candidate);
-        } catch (e) {
-          console.warn('Estrategia 3 (Extracción de llave a llave) falló. Intentando sanitización fina de caracteres de control...');
-          
-          // Stage 4: Sanitizar saltos de línea y caracteres de control dentro de strings
-          try {
-            let sanitized = '';
-            let insideQuote = false;
-            let escaped = false;
-            
-            for (let i = 0; i < candidate.length; i++) {
-              const char = candidate[i];
-              
-              if (char === '"' && !escaped) {
-                insideQuote = !insideQuote;
-                sanitized += char;
-              } else if (char === '\\' && insideQuote) {
-                escaped = !escaped;
-                sanitized += char;
-              } else {
-                escaped = false;
-                if (insideQuote) {
-                  if (char === '\n') {
-                    sanitized += '\\n';
-                  } else if (char === '\r') {
-                    sanitized += '\\r';
-                  } else if (char === '\t') {
-                    sanitized += '\\t';
-                  } else {
-                    sanitized += char;
-                  }
-                } else {
-                  sanitized += char;
-                }
-              }
-            }
-            return JSON.parse(sanitized);
-          } catch (sanitizeErr) {
-            console.warn('Estrategia 4 (Sanitización de caracteres de control) falló:', sanitizeErr.message);
-          }
-        }
-      }
-      
-      throw new Error('Todas las estrategias de parseo JSON fallaron.');
-    };
-
-    try {
-      const parsedJSON = parseResilient(text);
-      
-      // Validamos que por lo menos sea un objeto y tenga campos esperados
-      if (parsedJSON && typeof parsedJSON === 'object') {
-        const durationMs = Date.now() - startTime;
-        const promptTokens = responseMetadata?.promptTokenCount || responseMetadata?.promptTokens || 0;
-        const candidatesTokens = responseMetadata?.candidatesTokenCount || responseMetadata?.candidatesTokens || responseMetadata?.outputTokenCount || responseMetadata?.outputTokens || 0;
-        const totalTokens = responseMetadata?.totalTokenCount || responseMetadata?.totalTokens || (promptTokens + candidatesTokens);
-
-        // Normalizar los campos principales si vienen indefinidos para mantener uniformidad
-        return {
-          institution: parsedJSON.institution || 'ANLA',
-          documentType: parsedJSON.documentType || 'Otro',
-          sector: parsedJSON.sector || 'OTRO',
-          company: parsedJSON.company || 'No especificado',
-          region: parsedJSON.region || 'No especificado',
-          departamento: parsedJSON.departamento || 'No especificado',
-          municipio: parsedJSON.municipio || 'No especificado',
-          expediente: parsedJSON.expediente || 'No especificado',
-          date: parsedJSON.date || new Date().toISOString().split('T')[0],
-          importantDates: parsedJSON.importantDates || [],
-          signatories: parsedJSON.signatories || [],
-          summary: parsedJSON.summary || 'Sin resumen estructurado disponible.',
-          relevantData: parsedJSON.relevantData || [],
-          keyThemes: parsedJSON.keyThemes || [],
-          wikiKeywords: parsedJSON.wikiKeywords || [],
-          status: 'Analizado',
-          _audit: {
-            modelUsed: chosenModel,
-            durationMs: durationMs,
-            tokens: {
-              prompt: promptTokens,
-              candidates: candidatesTokens,
-              total: totalTokens
-            }
-          }
-        };
-      } else {
-        throw new Error('El JSON parseado no es un objeto válido.');
-      }
-      
-    } catch (parseError) {
-      console.error('Error crítico al parsear el JSON de Gemini. Retornando fallback estructurado. Respuesta cruda:', text);
-      const durationMs = Date.now() - startTime;
-      const promptTokens = responseMetadata?.promptTokenCount || responseMetadata?.promptTokens || 0;
-      const candidatesTokens = responseMetadata?.candidatesTokenCount || responseMetadata?.candidatesTokens || responseMetadata?.outputTokenCount || responseMetadata?.outputTokens || 0;
-      const totalTokens = responseMetadata?.totalTokenCount || responseMetadata?.totalTokens || (promptTokens + candidatesTokens);
+    const parsed = parseResilient(text);
+    if (parsed && typeof parsed === 'object') {
+      // Normalizar compatibilidad
+      const entidad = parsed.entidad || parsed.institution || 'Otro';
+      const tipoDoc = parsed.tipoDocumento || parsed.documentType || 'Otro';
+      const numDoc  = parsed.numeroDocumento || parsed.expediente || 'No especificado';
+      const fecha   = parsed.fechaDocumento || parsed.date || new Date().toISOString().split('T')[0];
 
       return {
-        institution: 'ANLA',
-        documentType: 'Otro',
-        sector: 'OTRO',
-        company: 'Error de análisis',
-        region: 'No especificado',
-        departamento: 'No especificado',
-        municipio: 'No especificado',
-        expediente: 'No especificado',
-        date: new Date().toISOString().split('T')[0],
-        importantDates: [],
-        signatories: [],
-        summary: `No se pudo parsear el análisis automático. El archivo fue subido con éxito pero falló el formateador de IA. Respuesta cruda: ${text.slice(0, 500)}...`,
-        relevantData: [],
-        keyThemes: ['Error'],
-        wikiKeywords: [],
-        status: 'Error en Análisis',
-        _audit: {
-          modelUsed: chosenModel,
-          durationMs: durationMs,
-          tokens: {
-            prompt: promptTokens,
-            candidates: candidatesTokens,
-            total: totalTokens
-          }
-        }
+        // ── Campos nuevos MinTic ──
+        entidad,
+        tipoDocumento: tipoDoc,
+        numeroDocumento: numDoc,
+        fechaDocumento: fecha,
+        fechasImportantes: parsed.fechasImportantes || [],
+        valorContrato: parsed.valorContrato || 'No aplica',
+        objetoContrato: parsed.objetoContrato || 'No especificado',
+        contratista: parsed.contratista || parsed.company || 'No especificado',
+        supervisor: parsed.supervisor || 'No especificado',
+        personas: parsed.personas || [],
+        firmantes: parsed.firmantes || parsed.signatories || [],
+        alertas: parsed.alertas || [],
+        resumen: parsed.resumen || parsed.summary || 'Sin resumen disponible.',
+        datosRelevantes: parsed.datosRelevantes || parsed.relevantData || [],
+        temasClave: parsed.temasClave || parsed.keyThemes || [],
+        wikiKeywords: parsed.wikiKeywords || [],
+        // ── Compatibilidad con campos anteriores ──
+        institution: entidad,
+        documentType: tipoDoc,
+        sector: parsed.sector || 'OTRO',
+        company: parsed.contratista || parsed.company || 'No especificado',
+        region: parsed.region || 'Nacional',
+        departamento: parsed.departamento || 'Nacional',
+        municipio: parsed.municipio || 'No especificado',
+        expediente: numDoc,
+        date: fecha,
+        importantDates: parsed.fechasImportantes?.map(f => ({ date: f.fecha, context: f.contexto })) || [],
+        signatories: parsed.firmantes || parsed.signatories || [],
+        summary: parsed.resumen || parsed.summary || 'Sin resumen disponible.',
+        relevantData: parsed.datosRelevantes || parsed.relevantData || [],
+        keyThemes: parsed.temasClave || parsed.keyThemes || [],
+        status: 'Analizado',
+        _audit: { modelUsed: chosenModel, durationMs, tokens: { prompt: promptTokens, candidates: candidatesTokens, total: totalTokens } }
       };
     }
-  } catch (error) {
-    console.error('Error en la llamada a Vertex AI (Gemini):', error);
-    throw error;
+    throw new Error('JSON parseado no es un objeto valido.');
+  } catch (parseError) {
+    console.error('Error critico de parseo. Respuesta cruda:', text);
+    return {
+      entidad: 'Otro', tipoDocumento: 'Otro', numeroDocumento: 'No especificado',
+      fechaDocumento: new Date().toISOString().split('T')[0],
+      fechasImportantes: [], valorContrato: 'No aplica', objetoContrato: 'Error de analisis',
+      contratista: 'Error de analisis', supervisor: 'No especificado',
+      personas: [], firmantes: [], alertas: ['Error en el analisis automatico del documento'],
+      resumen: `No se pudo parsear el analisis. Respuesta cruda: ${text.slice(0, 500)}`,
+      datosRelevantes: [], temasClave: ['Error'], wikiKeywords: [],
+      institution: 'Otro', documentType: 'Otro', sector: 'OTRO',
+      company: 'Error', region: 'No especificado', departamento: 'No especificado',
+      municipio: 'No especificado', expediente: 'No especificado',
+      date: new Date().toISOString().split('T')[0],
+      importantDates: [], signatories: [], summary: 'Error de analisis.',
+      relevantData: [], keyThemes: ['Error'], status: 'Error en Analisis',
+      _audit: { modelUsed: chosenModel, durationMs, tokens: { prompt: promptTokens, candidates: candidatesTokens, total: totalTokens } }
+    };
   }
 }

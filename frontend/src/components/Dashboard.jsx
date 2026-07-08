@@ -30,9 +30,6 @@ export default function Dashboard({ onSelectDoc }) {
   
   // Filtros
   const [filterType, setFilterType] = useState('Todos');
-  const [filterSector, setFilterSector] = useState('Todos');
-  const [filterRegion, setFilterRegion] = useState('Todos');
-  const [filterDept, setFilterDept] = useState('Todos');
   const [filterInstitution, setFilterInstitution] = useState('Todos');
   const [statusFilter, setStatusFilter] = useState('Todos');
 
@@ -356,10 +353,19 @@ export default function Dashboard({ onSelectDoc }) {
     }
   };
 
-  // Listas únicas para llenar los combos de filtros
-  const [regionsList, setRegionsList] = useState([]);
-  const [deptsList, setDeptsList] = useState([]);
-  const sectorsList = ['HIDROCARBUROS', 'MINERIA', 'INFRAESTRUCTURA', 'ENERGIA', 'AGROQUIMICOS', 'OTRO'];
+  // Entidades MinTic
+  const entidadesMinTic = [
+    'MinTIC', 'ANE', 'CRC', 'AND', 'FUTIC',
+    'RTVC', 'Servicios Postales Nacionales (4-72)',
+    'Persona Natural', 'Empresa Privada', 'Otro'
+  ];
+
+  // Tipos de documento MinTic
+  const tiposDocumento = [
+    'Contrato', 'Declaracion de Renta', 'Resolucion',
+    'Convenio', 'Acta', 'Licitacion', 'Certificacion',
+    'Informe', 'PQRS', 'Otro'
+  ];
 
   const fetchDocs = async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -370,26 +376,7 @@ export default function Dashboard({ onSelectDoc }) {
       }
       const docs = await response.json();
       
-      const regions = new Set();
-      const depts = new Set();
-
-      docs.forEach((data) => {
-        if (data.region && data.region !== 'Detectando...' && data.region !== 'No especificado') {
-          regions.add(data.region);
-        }
-        if (data.departamento && data.departamento !== 'Detectando...' && data.departamento !== 'No especificado') {
-          // Si tiene múltiples depts separados por coma, agregarlos individualmente
-          if (data.departamento.includes(',')) {
-            data.departamento.split(',').forEach(d => depts.add(d.trim()));
-          } else {
-            depts.add(data.departamento);
-          }
-        }
-      });
-
       setDocuments(docs);
-      setRegionsList(Array.from(regions));
-      setDeptsList(Array.from(depts));
       setDbError(null);
     } catch (error) {
       console.error("Error al cargar documentos del backend:", error);
@@ -438,7 +425,7 @@ export default function Dashboard({ onSelectDoc }) {
   // Reiniciar la paginación visible cuando cambie cualquier filtro de búsqueda o de combos
   useEffect(() => {
     setVisibleCount(60);
-  }, [search, filterType, filterSector, filterRegion, filterDept, filterInstitution, statusFilter]);
+  }, [search, filterType, filterInstitution, statusFilter]);
 
   // Filtrado de documentos del lado del cliente para búsqueda instantánea
   const filteredDocuments = documents.filter((doc) => {
@@ -463,11 +450,8 @@ export default function Dashboard({ onSelectDoc }) {
       ))
     );
 
-    const matchesType = filterType === 'Todos' || doc.documentType === filterType;
-    const matchesSector = filterSector === 'Todos' || doc.sector === filterSector;
-    const matchesRegion = filterRegion === 'Todos' || doc.region === filterRegion;
-    const matchesDept = filterDept === 'Todos' || doc.departamento?.includes(filterDept);
-    const matchesInstitution = filterInstitution === 'Todos' || doc.institution === filterInstitution;
+    const matchesType = filterType === 'Todos' || doc.tipoDocumento === filterType || doc.documentType === filterType;
+    const matchesInstitution = filterInstitution === 'Todos' || doc.entidad === filterInstitution || doc.institution === filterInstitution;
 
     let matchesStatus = true;
     if (statusFilter === 'Analizado') {
@@ -480,7 +464,7 @@ export default function Dashboard({ onSelectDoc }) {
       matchesStatus = doc.status === 'Cancelado';
     }
 
-    return matchesSearch && matchesType && matchesSector && matchesRegion && matchesDept && matchesInstitution && matchesStatus;
+    return matchesSearch && matchesType && matchesInstitution && matchesStatus;
   });
 
   const getStatusBadge = (status) => {
@@ -730,7 +714,7 @@ export default function Dashboard({ onSelectDoc }) {
           <Search size={20} color="var(--text-muted)" style={{ position: 'absolute', left: '16px' }} />
           <input 
             type="text" 
-            placeholder="Buscar por sector, departamento, municipio, radicado, empresa, firmantes, palabras clave o resumen..." 
+            placeholder="Buscar por entidad, contrato, persona, cedula, objeto, palabras clave o resumen..." 
             className="form-input" 
             style={{ width: '100%', paddingLeft: '48px', height: '48px' }}
             value={localSearch}
@@ -738,83 +722,58 @@ export default function Dashboard({ onSelectDoc }) {
           />
         </div>
 
-        {/* Filtros Combobox */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+        {/* Filtros MinTic */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: '0.75rem' }}>Entidad Emisora</label>
-            <select 
-              className="form-input" 
-              style={{ background: '#0f172a' }}
+            <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Entidad MinTic</label>
+            <select
+              style={{
+                background: '#FFFFFF',
+                color: '#2F3D42',
+                border: '1.5px solid #E0E6ED',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+                fontFamily: 'Roboto, sans-serif',
+                fontWeight: 500,
+                width: '100%',
+                cursor: 'pointer',
+                outline: 'none',
+                appearance: 'auto'
+              }}
               value={filterInstitution}
               onChange={(e) => setFilterInstitution(e.target.value)}
             >
-              <option value="Todos">Todas las entidades</option>
-              <option value="ANLA">ANLA</option>
-              <option value="Ministerio de Ambiente">Ministerio de Ambiente</option>
+              <option value="Todos">— Todas las entidades —</option>
+              {entidadesMinTic.map((ent, idx) => (
+                <option key={idx} value={ent}>{ent}</option>
+              ))}
             </select>
           </div>
 
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: '0.75rem' }}>Tipo de Trámite</label>
-            <select 
-              className="form-input" 
-              style={{ background: '#0f172a' }}
+            <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Tipo de Documento</label>
+            <select
+              style={{
+                background: '#FFFFFF',
+                color: '#2F3D42',
+                border: '1.5px solid #E0E6ED',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+                fontFamily: 'Roboto, sans-serif',
+                fontWeight: 500,
+                width: '100%',
+                cursor: 'pointer',
+                outline: 'none',
+                appearance: 'auto'
+              }}
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
             >
-              <option value="Todos">Todos los trámites</option>
-              <option value="Licencia">Licencias</option>
-              <option value="Sanción">Sanciones</option>
-              <option value="Resolución">Resoluciones</option>
-              <option value="Auto de Inicio">Autos de Inicio</option>
-              <option value="Concepto Técnico">Conceptos Técnicos</option>
-              <option value="PQRS">PQRS</option>
-              <option value="Documento Público">Documentos Públicos</option>
-              <option value="Otro">Otros</option>
-            </select>
-          </div>
-
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: '0.75rem' }}>Sector</label>
-            <select 
-              className="form-input" 
-              style={{ background: '#0f172a' }}
-              value={filterSector}
-              onChange={(e) => setFilterSector(e.target.value)}
-            >
-              <option value="Todos">Todos los sectores</option>
-              {sectorsList.map((sec, idx) => (
-                <option key={idx} value={sec}>{sec}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: '0.75rem' }}>Región / CAR</label>
-            <select 
-              className="form-input" 
-              style={{ background: '#0f172a' }}
-              value={filterRegion}
-              onChange={(e) => setFilterRegion(e.target.value)}
-            >
-              <option value="Todos">Todas las regiones</option>
-              {regionsList.map((reg, idx) => (
-                <option key={idx} value={reg}>{reg}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: '0.75rem' }}>Departamento</label>
-            <select 
-              className="form-input" 
-              style={{ background: '#0f172a' }}
-              value={filterDept}
-              onChange={(e) => setFilterDept(e.target.value)}
-            >
-              <option value="Todos">Todos los depto</option>
-              {deptsList.map((dept, idx) => (
-                <option key={idx} value={dept}>{dept}</option>
+              <option value="Todos">— Todos los tipos —</option>
+              {tiposDocumento.map((tipo, idx) => (
+                <option key={idx} value={tipo}>{tipo}</option>
               ))}
             </select>
           </div>

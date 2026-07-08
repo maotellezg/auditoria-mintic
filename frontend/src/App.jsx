@@ -367,23 +367,23 @@ function AppContent() {
     switch (activeTab) {
       case 'dashboard':
         return {
-          title: 'Dashboard de Documentos',
-          subtitle: 'Expedientes, licencias y autos analizados por IA'
+          title: 'Dashboard de Auditoría MinTic',
+          subtitle: 'Contratos, declaraciones y documentos del ecosistema MinTic analizados por IA'
         };
       case 'upload':
         return {
-          title: 'Cargar Documentos Ambientales',
-          subtitle: 'Sube tus PDFs, imágenes o Word para clasificación instantánea'
+          title: 'Cargar Documentos',
+          subtitle: 'Sube contratos, declaraciones de renta, resoluciones o cualquier documento MinTic'
         };
       case 'wiki':
         return {
-          title: 'WikiDoc',
-          subtitle: 'Red de conocimiento interconectada por proyectos, territorios y empresas'
+          title: 'Wiki de Conocimiento MinTic',
+          subtitle: 'Red de entidades, personas y contratos interconectados automáticamente'
         };
       case 'chat':
         return {
-          title: 'Asistente de Inteligencia Ambiental',
-          subtitle: 'Interactúa con el corpus documental mediante procesamiento de lenguaje natural y citas en tiempo real'
+          title: 'Asistente de Auditoría IA',
+          subtitle: 'Consulta contratos, personas y documentos mediante inteligencia artificial con citas en tiempo real'
         };
       case 'usuarios':
         return {
@@ -393,12 +393,12 @@ function AppContent() {
       case 'auditoria':
         return {
           title: 'Módulo de Auditoría Integral',
-          subtitle: 'Trazabilidad de acciones del sistema, justificaciones de carga y rendimiento de Vertex AI'
+          subtitle: 'Trazabilidad de acciones, justificaciones de carga y rendimiento de Vertex AI'
         };
       default:
         return {
-          title: 'Dashboard',
-          subtitle: 'Expedientes analizados'
+          title: 'Dashboard MinTic',
+          subtitle: 'Documentos analizados'
         };
     }
   };
