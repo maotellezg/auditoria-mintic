@@ -1105,13 +1105,14 @@ app.post('/api/admin/create-user', checkAdmin, async (req, res) => {
     }
 
 
-    // 4. Registrar el perfil y su rol en la colección de Firestore con los flags correspondientes
+    // 4. Registrar el perfil y su rol en Firestore
+    // El usuario establece su contraseña desde el link de email → no se fuerza cambio al entrar
     const userData = {
       id: uid,
       email: email,
       role: role,
-      status: isPasswordless ? 'PENDING_SETUP' : 'ACTIVE_TEMPORARY',
-      requirePasswordChange: true, // Forzar cambio en primer inicio
+      status: isPasswordless ? 'PENDING_SETUP' : 'ACTIVE',
+      requirePasswordChange: false, // No se requiere — el link de email ya lo maneja
       createdAt: new Date().toISOString()
     };
 
