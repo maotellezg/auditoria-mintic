@@ -40,7 +40,7 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword 
             onClick={() => setActiveTab('wiki')}
           >
             <BookOpen size={20} />
-            <span>Wiki Ambiental</span>
+            <span>WikiDoc</span>
           </div>
         </li>
 

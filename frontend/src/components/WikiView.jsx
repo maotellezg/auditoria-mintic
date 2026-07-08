@@ -121,7 +121,7 @@ export default function WikiView({ onSelectDoc }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button className="btn btn-secondary" onClick={handleBackToHome}>
-            Volver a la Wiki
+            Volver a WikiDoc
           </button>
         </div>
 

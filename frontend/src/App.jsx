@@ -377,7 +377,7 @@ function AppContent() {
         };
       case 'wiki':
         return {
-          title: 'Wiki Ambiental',
+          title: 'WikiDoc',
           subtitle: 'Red de conocimiento interconectada por proyectos, territorios y empresas'
         };
       case 'chat':
