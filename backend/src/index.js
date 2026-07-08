@@ -1070,12 +1070,11 @@ app.post('/api/admin/create-user', checkAdmin, async (req, res) => {
 
     const uid = userRecord.uid;
 
-    // 3. Generar enlace de activación — si el dominio no está autorizado en Firebase, cancelar y borrar usuario
+    // 3. Generar enlace de activación SIEMPRE (para todos los usuarios nuevos)
     let setupLink = null;
     try {
-      setupLink = await authAdmin.generatePasswordResetLink(email, {
-        url: 'https://entrega-anla-33385687524.us-central1.run.app'
-      });
+      // Sin URL de redirección personalizada para evitar error de dominio no autorizado
+      setupLink = await authAdmin.generatePasswordResetLink(email);
     } catch (linkError) {
       const isDomainError = linkError.message && (
         linkError.message.includes('Domain not allowlisted') ||
@@ -1083,13 +1082,11 @@ app.post('/api/admin/create-user', checkAdmin, async (req, res) => {
         linkError.code === 'auth/unauthorized-continue-uri'
       );
       if (isDomainError) {
-        const domain = email.split('@')[1];
-        // Borrar el usuario recién creado para no dejar registros huérfanos
         try { await authAdmin.deleteUser(uid); } catch (_) {}
-        console.error(`[ADMIN] ❌ Dominio no autorizado: ${domain} — usuario borrado.`);
+        console.error(`[ADMIN] ❌ URL de redirección no autorizada en Firebase — usuario borrado.`);
         return res.status(400).json({
-          error: `El dominio "@${domain}" no está autorizado en Firebase.`,
-          hint: `Ve a Firebase Console → Authentication → Configuración → Dominios autorizados y agrega "${domain}".`,
+          error: `La URL de la app no está autorizada en Firebase para enviar correos.`,
+          hint: `Ve a Firebase Console → Authentication → Configuración → Dominios autorizados y agrega "entrega-anla-33385687524.us-central1.run.app".`,
           domainError: true
         });
       }
@@ -1238,10 +1235,9 @@ app.post('/api/admin/resend-welcome-email', checkAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Faltan campos obligatorios: uid, email' });
   }
   try {
-    // 1. Generar nuevo link de activación
-    const setupLink = await authAdmin.generatePasswordResetLink(email, {
-      url: 'https://entrega-anla-33385687524.us-central1.run.app'
-    });
+    // 1. Generar nuevo link de activación (sin URL personalizada para evitar error de dominio)
+    const setupLink = await authAdmin.generatePasswordResetLink(email);
+
 
     // 2. Verificar que hay config SMTP
     const settingsDoc = await db.collection('settings').doc('email').get();
