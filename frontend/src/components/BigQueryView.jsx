@@ -46,27 +46,54 @@ export default function BigQueryView() {
 
     try {
       const token = await currentUser.getIdToken();
-      const es = new EventSource(`/api/secop/sync-bigquery/stream?token=${token}`);
-      esRef.current = es;
 
-      es.onmessage = (ev) => {
-        try {
-          const data = JSON.parse(ev.data);
-          if (data.tipo === 'fin') {
-            es.close(); setSyncActivo(false); setSyncDone(true);
-            cargarStats();
-          } else if (data.tipo === 'resumen') {
-            setResumen(data.resumen);
-          } else {
-            addLog(data.msg || '', data.tipo || 'info');
+      // Usar fetch con ReadableStream en vez de EventSource
+      // (EventSource no soporta headers de autorización)
+      const resp = await fetch('/api/secop/sync-bigquery/stream', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!resp.ok) {
+        addLog(`❌ Error ${resp.status}: ${await resp.text()}`, 'error');
+        setSyncActivo(false);
+        return;
+      }
+
+      const reader  = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer    = '';
+
+      const processChunk = async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // guarda línea incompleta
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.tipo === 'fin') {
+                setSyncActivo(false); setSyncDone(true);
+                cargarStats();
+                return;
+              } else if (data.tipo === 'resumen') {
+                setResumen(data.resumen);
+              } else if (data.msg) {
+                addLog(data.msg, data.tipo || 'info');
+              }
+            } catch {}
           }
-        } catch {}
+        }
+        setSyncActivo(false); setSyncDone(true);
+        cargarStats();
       };
 
-      es.onerror = () => {
-        addLog('❌ Conexión SSE interrumpida.', 'error');
-        es.close(); setSyncActivo(false);
-      };
+      processChunk().catch(err => {
+        addLog(`❌ Error de stream: ${err.message}`, 'error');
+        setSyncActivo(false);
+      });
 
     } catch (err) {
       addLog(`❌ Error: ${err.message}`, 'error');
