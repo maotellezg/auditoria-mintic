@@ -23,7 +23,7 @@ export default function Chat({ onSelectDoc }) {
       {
         id: 'welcome',
         role: 'assistant',
-        content: '¡Hola! Bienvenido a **Anla-Chat**, tu asistente de análisis documental inteligente. Puedo buscar, leer y extraer respuestas exactas en base a todo el corpus de resoluciones, licencias, autos e informes ambientales que han sido analizados.\n\nEscribe tu pregunta abajo para comenzar.',
+        content: '¡Hola! Bienvenido a **Análisis de Documentos**, tu asistente de análisis documental inteligente. Puedo buscar, leer y extraer respuestas exactas en base a todo el corpus de resoluciones, licencias, autos e informes ambientales que han sido analizados.\n\nEscribe tu pregunta abajo para comenzar.',
         citations: [],
         timestamp: new Date().toISOString()
       }
@@ -124,7 +124,7 @@ export default function Chat({ onSelectDoc }) {
         {
           id: 'welcome',
           role: 'assistant',
-          content: 'Chat reiniciado. ¿En qué expediente o trámite ambiental de la ANLA te puedo colaborar hoy?',
+          content: 'Chat reiniciado. ¿En qué expediente o trámite ambiental te puedo colaborar hoy?',
           citations: [],
           timestamp: new Date().toISOString()
         }
@@ -278,7 +278,7 @@ export default function Chat({ onSelectDoc }) {
           <MessageSquare size={16} />
         </div>
         <div>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>Anla-Chat</h3>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>Análisis de Documentos</h3>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>RAG Inteligente • Consulta unificada de todo el corpus documental</p>
         </div>
       </div>
@@ -351,7 +351,7 @@ export default function Chat({ onSelectDoc }) {
             </div>
             <div className="chat-msg-content" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="loading-spin" style={{ display: 'inline-block', width: '14px', height: '14px', border: '2px solid var(--color-success)', borderTopColor: 'transparent', borderRadius: '50%' }}></span>
-              <span style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>Anla-Chat está analizando todo el corpus documental...</span>
+              <span style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>Analizando el corpus documental...</span>
             </div>
           </div>
         )}

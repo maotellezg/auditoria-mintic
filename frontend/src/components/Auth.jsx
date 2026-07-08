@@ -54,7 +54,7 @@ export default function Auth() {
             </div>
           </div>
           <h2>
-            {mode === 'login' && 'ANLA Inteligente'}
+            {mode === 'login' && 'Análisis de Documentos'}
             {mode === 'forgot' && 'Recuperar Contraseña'}
           </h2>
           <p>

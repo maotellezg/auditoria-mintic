@@ -23,7 +23,7 @@ export default function Header({ title, subtitle }) {
             {currentUser?.email ? currentUser.email.split('@')[0] : 'Usuario'}
           </span>
           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-            Ambiental ANLA
+            Análisis de Documentos
           </span>
         </div>
       </div>

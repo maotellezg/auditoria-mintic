@@ -8,7 +8,7 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword 
     <div className="sidebar">
       <div className="sidebar-brand">
         <FileText size={28} color="#00f2fe" />
-        <span>ANLA Entrega</span>
+        <span>Análisis de Documentos</span>
       </div>
 
       <ul className="sidebar-menu">

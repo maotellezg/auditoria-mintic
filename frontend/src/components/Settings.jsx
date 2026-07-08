@@ -25,8 +25,8 @@ export default function SettingsView() {
   const [secure, setSecure] = useState(false);
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
-  const [fromName, setFromName] = useState('ANLA Inteligente');
-  const [platformName, setPlatformName] = useState('ANLA Inteligente');
+  const [fromName, setFromName] = useState('Análisis de Documentos');
+  const [platformName, setPlatformName] = useState('Análisis de Documentos');
 
   const [configExists, setConfigExists] = useState(false);
 
@@ -49,8 +49,8 @@ export default function SettingsView() {
           setSecure(data.secure || false);
           setUser(data.user || '');
           setPass(data.pass || '');
-          setFromName(data.fromName || 'ANLA Inteligente');
-          setPlatformName(data.platformName || 'ANLA Inteligente');
+          setFromName(data.fromName || 'Análisis de Documentos');
+          setPlatformName(data.platformName || 'Análisis de Documentos');
           setConfigExists(true);
         }
       }
@@ -185,12 +185,12 @@ export default function SettingsView() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
           <div>
             <label style={labelStyle}>Nombre de la Plataforma</label>
-            <input style={inputStyle} value={platformName} onChange={e => setPlatformName(e.target.value)} placeholder="Ej: ANLA Inteligente" />
+            <input style={inputStyle} value={platformName} onChange={e => setPlatformName(e.target.value)} placeholder="Ej: Análisis de Documentos" />
             <p style={{ fontSize: '0.73rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>Aparece en los correos enviados</p>
           </div>
           <div>
             <label style={labelStyle}>Nombre del Remitente</label>
-            <input style={inputStyle} value={fromName} onChange={e => setFromName(e.target.value)} placeholder="Ej: Equipo ANLA" />
+            <input style={inputStyle} value={fromName} onChange={e => setFromName(e.target.value)} placeholder="Ej: Equipo Análisis de Documentos" />
             <p style={{ fontSize: '0.73rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>El nombre que verá el destinatario</p>
           </div>
         </div>

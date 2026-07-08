@@ -377,7 +377,7 @@ function AppContent() {
         };
       case 'wiki':
         return {
-          title: 'Wiki Ambiental ANLA',
+          title: 'Wiki Ambiental',
           subtitle: 'Red de conocimiento interconectada por proyectos, territorios y empresas'
         };
       case 'chat':
