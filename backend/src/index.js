@@ -2243,16 +2243,26 @@ app.post('/api/secop/sync-bigquery', async (req, res) => {
 /**
  * POST /api/secop/index-bq-rag
  * Disparo manual: convierte contratos BQ → chunks RAG en Firestore.
- * Requiere autenticación. Tarda varios minutos según volumen.
+ * Acepta X-Sync-Secret header (sin Firebase) o token de usuario.
  */
-app.post('/api/secop/index-bq-rag', checkUser, async (req, res) => {
+app.post('/api/secop/index-bq-rag', async (req, res) => {
+  const secret = req.headers['x-sync-secret'];
+  const SYNC_SECRET = process.env.SYNC_SECRET || 'sync-mintic-2024';
+  if (secret !== SYNC_SECRET) {
+    try {
+      const authHeader = req.headers.authorization || '';
+      const tkn = authHeader.replace('Bearer ', '');
+      if (!tkn) return res.status(403).json({ error: 'Acceso denegado.' });
+      await getAuth().verifyIdToken(tkn);
+    } catch { return res.status(403).json({ error: 'Acceso denegado.' }); }
+  }
   const { entidadId, limite } = req.body || {};
-  res.json({ ok: true, mensaje: 'Indexación BQ→RAG iniciada en background. El chat usará los contratos en ~2 minutos.' });
-  // Corre en background sin bloquear la respuesta HTTP
-  indexarContratosEnRAG({ db, getEmbedding, entidadId, limite: limite || 2000 })
+  res.json({ ok: true, mensaje: 'Indexación BQ→RAG iniciada. El chat usará los contratos en ~5 minutos.' });
+  indexarContratosEnRAG({ db, getEmbedding, entidadId, limite: limite || 300 })
     .then(r => console.log('[BQ-RAG] Manual index completo:', r))
     .catch(e => console.error('[BQ-RAG] Manual index error:', e.message));
 });
+
 
 
 /**
