@@ -11,6 +11,7 @@ import { getEmbedding } from './services/embeddings.js';
 import { extractTextFromDocument, splitTextIntoChunks } from './services/chunker.js';
 import { VertexAI } from '@google-cloud/vertexai';
 import nodemailer from 'nodemailer';
+import { fetchContratosByNit, countContratosByNit, fetchContratosByProveedor, countContratosByProveedor, normalizarContrato, ENTIDADES_MINTIC, SECOP_SOURCES } from './services/secop.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1912,6 +1913,229 @@ app.post('/api/admin/test-email', checkAdmin, async (req, res) => {
 // Servir la aplicación en producción (unificación de frontend y backend en un solo contenedor)
 const publicPath = path.join(__dirname, '../public');
 app.use(express.static(publicPath));
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SECOP — Módulo de Contratación Pública MinTic
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/secop/entidades
+ * Retorna la lista de entidades MinTic configuradas con NITs.
+ */
+app.get('/api/secop/entidades', checkUser, (req, res) => {
+  res.json(ENTIDADES_MINTIC.map(e => ({
+    id: e.id,
+    nombre: e.nombre,
+    nombreCompleto: e.nombreCompleto,
+    nit: e.nit,
+    color: e.color,
+    icono: e.icono
+  })));
+});
+
+/**
+ * GET /api/secop/contratos/:entidadId
+ * Consulta los contratos de una entidad en SECOP II (y opcionalmente SECOP I).
+ * Query params: page, pageSize, fuente, tipoContrato, estado, search, valorMin, valorMax
+ */
+app.get('/api/secop/contratos/:entidadId', checkUser, async (req, res) => {
+  const { entidadId } = req.params;
+  const {
+    page = '1',
+    pageSize = '100',
+    fuente = 'secop_ii',
+    tipoContrato,
+    estado,
+    search,
+    valorMin,
+    valorMax
+  } = req.query;
+
+  const entidad = ENTIDADES_MINTIC.find(e => e.id === entidadId);
+  if (!entidad) {
+    return res.status(404).json({ error: `Entidad '${entidadId}' no encontrada.` });
+  }
+
+  const source = SECOP_SOURCES[fuente.toUpperCase()] || SECOP_SOURCES.SECOP_II;
+  const limit  = Math.min(parseInt(pageSize, 10) || 100, 1000);
+  const offset = (parseInt(page, 10) - 1) * limit;
+  const filters = { tipoContrato, estado, search, valorMin, valorMax };
+
+  try {
+    console.log(`[SECOP] ${entidad.nombre} (NIT: ${entidad.nit}) — página ${page} — fuente: ${source.id}`);
+
+    const [rawData, total] = await Promise.all([
+      fetchContratosByNit(entidad.nit, source, limit, offset, filters),
+      offset === 0 ? countContratosByNit(entidad.nit, source) : Promise.resolve(-1)
+    ]);
+
+    const contratos = rawData.map(r => normalizarContrato(r, source.id));
+
+    // Estadísticas rápidas (solo en primera página)
+    let estadisticas = null;
+    if (offset === 0 && contratos.length > 0) {
+      const vals = contratos.map(c => c.valor).filter(v => v > 0);
+      estadisticas = {
+        totalContratos: total,
+        valorTotal: vals.reduce((a, b) => a + b, 0),
+        valorPromedio: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0,
+        valorMaximo: vals.length ? Math.max(...vals) : 0,
+        contratosEnEjecucion: contratos.filter(c => c.estado?.toLowerCase().includes('ejecuci')).length,
+        contratosCerrados: contratos.filter(c => c.estado?.toLowerCase().includes('cerrado') || c.estado?.toLowerCase().includes('liquidado')).length,
+        contratosConAdicion: contratos.filter(c => c.diasAdicionados > 0).length
+      };
+    }
+
+    return res.json({
+      entidad: { id: entidad.id, nombre: entidad.nombre, nit: entidad.nit, color: entidad.color },
+      fuente: source.label,
+      page: parseInt(page, 10),
+      pageSize: limit,
+      total: total >= 0 ? total : undefined,
+      count: contratos.length,
+      estadisticas,
+      contratos
+    });
+
+  } catch (err) {
+    console.error(`[SECOP] Error consultando ${entidad.nombre}:`, err.message);
+    return res.status(500).json({
+      error: 'Error al consultar la API de SECOP.',
+      details: err.message,
+      entidad: entidad.nombre
+    });
+  }
+});
+
+/**
+ * GET /api/secop/como-proveedor/:entidadId
+ * Contratos donde la entidad MinTic aparece como PROVEEDOR (documento_proveedor = NIT).
+ * Revela cuánto dinero RECIBIÓ la entidad de otras entidades del Estado.
+ */
+app.get('/api/secop/como-proveedor/:entidadId', checkUser, async (req, res) => {
+  const { entidadId } = req.params;
+  const {
+    page = '1',
+    pageSize = '100',
+    fuente = 'secop_ii',
+    tipoContrato,
+    estado,
+    search,
+    valorMin,
+    valorMax
+  } = req.query;
+
+  const entidad = ENTIDADES_MINTIC.find(e => e.id === entidadId);
+  if (!entidad) return res.status(404).json({ error: `Entidad '${entidadId}' no encontrada.` });
+
+  const source = SECOP_SOURCES[fuente.toUpperCase()] || SECOP_SOURCES.SECOP_II;
+  const limit  = Math.min(parseInt(pageSize, 10) || 100, 1000);
+  const offset = (parseInt(page, 10) - 1) * limit;
+  const filters = { tipoContrato, estado, search, valorMin, valorMax };
+
+  try {
+    console.log(`[SECOP-PROV] ${entidad.nombre} como proveedor (NIT: ${entidad.nit}) — pág ${page}`);
+
+    const [rawData, total] = await Promise.all([
+      fetchContratosByProveedor(entidad, source, limit, offset, filters),
+      offset === 0 ? countContratosByProveedor(entidad, source) : Promise.resolve(-1)
+    ]);
+
+    const contratos = rawData.map(r => {
+      const c = normalizarContrato(r, source.id);
+      // En modo proveedor: la entidad ES el contratista — añadir quién les contrató
+      c._contratante = r.nombre_entidad || '';
+      c._nitContratante = r.nit_entidad || '';
+      return c;
+    });
+
+    let estadisticas = null;
+    if (offset === 0 && contratos.length > 0) {
+      const vals = contratos.map(c => c.valor).filter(v => v > 0);
+      // Agrupar por entidad contratante para ver quién más les paga
+      const porContratante = {};
+      contratos.forEach(c => {
+        const k = c._contratante || 'Desconocida';
+        if (!porContratante[k]) porContratante[k] = { count: 0, valor: 0 };
+        porContratante[k].count++;
+        porContratante[k].valor += c.valor;
+      });
+      const topContratantes = Object.entries(porContratante)
+        .sort((a, b) => b[1].valor - a[1].valor)
+        .slice(0, 5)
+        .map(([nombre, d]) => ({ nombre, count: d.count, valor: d.valor }));
+
+      estadisticas = {
+        totalContratos: total,
+        valorTotalRecibido: vals.reduce((a, b) => a + b, 0),
+        valorPromedio: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0,
+        valorMaximo: vals.length ? Math.max(...vals) : 0,
+        topContratantes
+      };
+    }
+
+    return res.json({
+      entidad: { id: entidad.id, nombre: entidad.nombre, nit: entidad.nit, color: entidad.color },
+      modo: 'proveedor',
+      fuente: source.label,
+      page: parseInt(page, 10),
+      pageSize: limit,
+      total: total >= 0 ? total : undefined,
+      count: contratos.length,
+      estadisticas,
+      contratos
+    });
+
+  } catch (err) {
+    console.error(`[SECOP-PROV] Error:`, err.message);
+    return res.status(500).json({ error: 'Error al consultar SECOP como proveedor.', details: err.message });
+  }
+});
+
+/**
+ * GET /api/secop/resumen
+ * Totales de contratos por entidad (todas las entidades en paralelo).
+ */
+app.get('/api/secop/resumen', checkUser, async (req, res) => {
+  try {
+    const source = SECOP_SOURCES.SECOP_II;
+    const resultados = await Promise.allSettled(
+      ENTIDADES_MINTIC.map(async (entidad) => {
+        const total = await countContratosByNit(entidad.nit, source);
+        // Primera página para estadísticas de valor
+        const rawData = await fetchContratosByNit(entidad.nit, source, 200, 0, {});
+        const contratos = rawData.map(r => normalizarContrato(r, source.id));
+        const vals = contratos.map(c => c.valor).filter(v => v > 0);
+        return {
+          id: entidad.id,
+          nombre: entidad.nombre,
+          nombreCompleto: entidad.nombreCompleto,
+          nit: entidad.nit,
+          color: entidad.color,
+          icono: entidad.icono,
+          totalContratos: total,
+          valorTotalMuestra: vals.reduce((a, b) => a + b, 0),
+          valorPromedio: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+        };
+      })
+    );
+
+    const resumen = resultados.map((r, i) => {
+      if (r.status === 'fulfilled') return r.value;
+      return {
+        ...ENTIDADES_MINTIC[i],
+        totalContratos: 0,
+        valorTotalMuestra: 0,
+        error: r.reason?.message
+      };
+    });
+
+    return res.json({ resumen, fuenteFecha: '2020-08-07 en adelante', fuente: source.label });
+
+  } catch (err) {
+    return res.status(500).json({ error: 'Error al obtener resumen SECOP.', details: err.message });
+  }
+});
 
 // Cualquier otra ruta no-API debe retornar el index.html del frontend
 app.get('*', (req, res) => {

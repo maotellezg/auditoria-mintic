@@ -1,4 +1,4 @@
-import { LayoutDashboard, UploadCloud, BookOpen, LogOut, FileText, Users, History, KeyRound, MessageSquare, Settings } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, BookOpen, LogOut, FileText, Users, History, KeyRound, MessageSquare, Settings, Building2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword }) {
@@ -51,6 +51,16 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword 
           >
             <MessageSquare size={20} />
             <span>Chat con IA</span>
+          </div>
+        </li>
+
+        <li>
+          <div 
+            className={`sidebar-link ${activeTab === 'secop' ? 'active' : ''}`}
+            onClick={() => setActiveTab('secop')}
+          >
+            <Building2 size={20} />
+            <span>Contratación SECOP</span>
           </div>
         </li>
 
