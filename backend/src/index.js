@@ -1070,15 +1070,32 @@ app.post('/api/admin/create-user', checkAdmin, async (req, res) => {
 
     const uid = userRecord.uid;
 
-    // 3. Generar enlace de activación SIEMPRE (para todos los usuarios nuevos, con o sin contraseña)
+    // 3. Generar enlace de activación — si el dominio no está autorizado en Firebase, cancelar y borrar usuario
     let setupLink = null;
     try {
       setupLink = await authAdmin.generatePasswordResetLink(email, {
         url: 'https://entrega-anla-33385687524.us-central1.run.app'
       });
     } catch (linkError) {
-      console.warn('No se pudo generar el enlace de configuración de Firebase:', linkError.message);
+      const isDomainError = linkError.message && (
+        linkError.message.includes('Domain not allowlisted') ||
+        linkError.message.includes('unauthorized-domain') ||
+        linkError.code === 'auth/unauthorized-continue-uri'
+      );
+      if (isDomainError) {
+        const domain = email.split('@')[1];
+        // Borrar el usuario recién creado para no dejar registros huérfanos
+        try { await authAdmin.deleteUser(uid); } catch (_) {}
+        console.error(`[ADMIN] ❌ Dominio no autorizado: ${domain} — usuario borrado.`);
+        return res.status(400).json({
+          error: `El dominio "@${domain}" no está autorizado en Firebase.`,
+          hint: `Ve a Firebase Console → Authentication → Configuración → Dominios autorizados y agrega "${domain}".`,
+          domainError: true
+        });
+      }
+      console.warn('No se pudo generar el enlace:', linkError.message);
     }
+
 
     // 4. Registrar el perfil y su rol en la colección de Firestore con los flags correspondientes
     const userData = {
@@ -1154,12 +1171,13 @@ app.post('/api/admin/create-user', checkAdmin, async (req, res) => {
       success: true,
       message: emailSent
         ? `El usuario ${email} fue creado y el correo de bienvenida fue enviado automáticamente.`
-        : isPasswordless
-          ? `El usuario ${email} fue creado. Configura el SMTP en Configuración para enviar correos automáticamente.`
-          : `El usuario ${email} fue creado con éxito con contraseña temporal.`,
+        : domainError
+          ? `Usuario creado. No se pudo enviar el correo: dominio no autorizado en Firebase.`
+          : `El usuario ${email} fue creado. Configura el SMTP en Configuración para enviar correos automáticamente.`,
       setupLink: setupLink,
       emailSent: emailSent,
       emailError: emailError,
+      domainError: domainError,
       isPasswordless: isPasswordless,
       user: { uid, email, role }
     });

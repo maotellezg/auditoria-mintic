@@ -22,6 +22,7 @@ export default function UserManagement() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
   const [createSuccess, setCreateSuccess] = useState('');
+  const [domainError, setDomainError] = useState(null); // { domain, hint }
 
   // Enlace setup link tras creación passwordless
   const [createdSetupLink, setCreatedSetupLink] = useState(null);
@@ -288,8 +289,10 @@ export default function UserManagement() {
     e.preventDefault();
     setCreateError('');
     setCreateSuccess('');
+    setDomainError(null);
     setCreatedSetupLink(null);
     setCreatedUserEmail('');
+    setEmailSentStatus(null);
     setCreateLoading(true);
 
     try {
@@ -313,6 +316,11 @@ export default function UserManagement() {
 
       if (!response.ok) {
         const data = await response.json();
+        if (data.domainError) {
+          const domain = email.split('@')[1];
+          setDomainError({ domain, hint: data.hint });
+          return; // No lanzar error genérico, el UI de domainError lo muestra
+        }
         throw new Error(data.error || 'Error al crear el usuario.');
       }
 
@@ -572,6 +580,35 @@ export default function UserManagement() {
             <UserPlus size={22} color="var(--color-accent)" />
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Crear Nuevo Usuario</h3>
           </div>
+
+          {domainError && (
+            <div style={{
+              display: 'flex', gap: '12px', alignItems: 'flex-start',
+              background: 'rgba(255, 94, 98, 0.08)',
+              border: '1px solid rgba(255, 94, 98, 0.3)',
+              borderRadius: '8px', padding: '14px'
+            }}>
+              <AlertCircle size={18} color="var(--color-error)" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div style={{ fontSize: '0.83rem', lineHeight: 1.6 }}>
+                <strong style={{ color: 'var(--color-error)', display: 'block', marginBottom: '4px' }}>
+                  Dominio "@{domainError.domain}" no autorizado
+                </strong>
+                <span style={{ color: 'var(--text-secondary)' }}>El usuario NO fue creado. Para habilitar este dominio:</span>
+                <ol style={{ margin: '8px 0 8px 16px', padding: 0, color: 'var(--text-secondary)' }}>
+                  <li>Ve a <a href="https://console.firebase.google.com/project/entrega-anla/authentication/settings" target="_blank" rel="noreferrer" style={{ color: 'var(--color-primary)' }}>Firebase Console → Authentication → Configuración</a></li>
+                  <li>Busca <strong style={{ color: 'var(--text-main)' }}>"Dominios autorizados"</strong> y haz clic en <strong style={{ color: 'var(--text-main)' }}>"Agregar dominio"</strong></li>
+                  <li>Escribe <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 6px', borderRadius: '4px', color: 'var(--color-primary)' }}>{domainError.domain}</code> y guarda</li>
+                </ol>
+                <button
+                  type="button"
+                  style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '0.8rem', padding: 0, textDecoration: 'underline' }}
+                  onClick={() => setDomainError(null)}
+                >
+                  Cerrar aviso
+                </button>
+              </div>
+            </div>
+          )}
 
           {createError && (
             <div style={{ display: 'flex', gap: '8px', color: 'var(--color-error)', fontSize: '0.85rem', background: 'rgba(255, 94, 98, 0.08)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255, 94, 98, 0.15)' }}>
