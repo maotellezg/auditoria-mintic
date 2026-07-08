@@ -1168,16 +1168,14 @@ app.post('/api/admin/create-user', checkAdmin, async (req, res) => {
       success: true,
       message: emailSent
         ? `El usuario ${email} fue creado y el correo de bienvenida fue enviado automáticamente.`
-        : domainError
-          ? `Usuario creado. No se pudo enviar el correo: dominio no autorizado en Firebase.`
-          : `El usuario ${email} fue creado. Configura el SMTP en Configuración para enviar correos automáticamente.`,
+        : `El usuario ${email} fue creado. Configura el SMTP en Configuración para enviar correos automáticamente.`,
       setupLink: setupLink,
       emailSent: emailSent,
       emailError: emailError,
-      domainError: domainError,
       isPasswordless: isPasswordless,
       user: { uid, email, role }
     });
+
 
   } catch (error) {
     console.error('Error al crear usuario administrativo:', error);
