@@ -263,13 +263,15 @@ export async function countContratante(entidad, sourceId) {
 
 export async function fetchProveedor(entidad, sourceId, limit = 100, offset = 0, filters = {}) {
   const source = SECOP_SOURCES[sourceId] || SECOP_SOURCES.SECOP_II_CONTRATOS;
-  // Añadir entidad contratante a los campos seleccionados para saber quién los contrató
+  // Añadir campos de entidad contratante según la fuente (cada API tiene nombres distintos)
+  // - secop_ii_contratos: nombre_entidad, nit_entidad
+  // - secop_ii_procesos:  entidad (no nombre_entidad), nit_entidad
+  // - tienda_virtual:     entidad, id_entidad
+  const entityNameField = source.id === 'secop_ii_contratos' ? 'nombre_entidad' : 'entidad';
+  const entityIdField   = source.id === 'tienda_virtual'     ? 'id_entidad'     : 'nit_entidad';
   const extraSource = {
     ...source,
-    selectFields: [...new Set([...source.selectFields,
-      source.id === 'tienda_virtual' ? 'entidad' : 'nombre_entidad',
-      source.id === 'tienda_virtual' ? 'id_entidad' : 'nit_entidad'
-    ])]
+    selectFields: [...new Set([...source.selectFields, entityNameField, entityIdField])]
   };
   const where = whereProveedor(entidad, source, filters);
   return querySecop(extraSource, where, limit, offset);
