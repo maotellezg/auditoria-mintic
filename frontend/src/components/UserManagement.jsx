@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Users, UserPlus, KeyRound, Trash2, Shield, Eye, Check, X, AlertCircle, CheckCircle, ShieldAlert } from 'lucide-react';
+import { Users, UserPlus, KeyRound, Trash2, Shield, Eye, Check, X, AlertCircle, CheckCircle, ShieldAlert, Mail, Send, Loader } from 'lucide-react';
 
 export default function UserManagement() {
   const { currentUser } = useAuth();
@@ -37,6 +37,15 @@ export default function UserManagement() {
   // Notificaciones generales
   const [generalError, setGeneralError] = useState('');
   const [generalSuccess, setGeneralSuccess] = useState('');
+
+  // Reenviar correo
+  const [resendingUid, setResendingUid] = useState(null);
+  const [emailSentStatus, setEmailSentStatus] = useState(null); // { ok, message }
+
+  // Probar correo
+  const [testEmail, setTestEmail] = useState('');
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState(null);
 
   const formatUserDate = (createdAt) => {
     if (!createdAt) return 'Pre-existente';
@@ -308,9 +317,16 @@ export default function UserManagement() {
       }
 
       const data = await response.json();
+      // Mostrar si el correo fue enviado o no
+      setEmailSentStatus({
+        ok: data.emailSent,
+        message: data.emailSent
+          ? `✅ Correo de bienvenida enviado automáticamente a ${email}.`
+          : `⚠️ Usuario creado. ${data.message}`
+      });
       setCreateSuccess(data.message);
       
-      if (data.isPasswordless && data.setupLink) {
+      if (data.isPasswordless && data.setupLink && !data.emailSent) {
         setCreatedSetupLink(data.setupLink);
         setCreatedUserEmail(email);
       }
@@ -410,6 +426,48 @@ export default function UserManagement() {
     } catch (err) {
       console.error(err);
       setGeneralError(err.message);
+    }
+  };
+
+  const handleResendEmail = async (u) => {
+    setResendingUid(u.id);
+    setGeneralError('');
+    setGeneralSuccess('');
+    try {
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch('/api/admin/resend-welcome-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify({ uid: u.id, email: u.email })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Error al reenviar correo.');
+      setGeneralSuccess(data.message);
+      fetchUsers();
+    } catch (err) {
+      setGeneralError(err.message);
+    } finally {
+      setResendingUid(null);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    if (!testEmail.trim()) return;
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch('/api/admin/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify({ to: testEmail })
+      });
+      const data = await res.json();
+      setTestResult({ ok: res.ok, message: data.message || data.error });
+    } catch (err) {
+      setTestResult({ ok: false, message: err.message });
+    } finally {
+      setTestLoading(false);
     }
   };
 
@@ -519,6 +577,22 @@ export default function UserManagement() {
             <div style={{ display: 'flex', gap: '8px', color: 'var(--color-error)', fontSize: '0.85rem', background: 'rgba(255, 94, 98, 0.08)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255, 94, 98, 0.15)' }}>
               <AlertCircle size={16} style={{ flexShrink: 0 }} />
               <span>{createError}</span>
+            </div>
+          )}
+
+          {emailSentStatus && (
+            <div
+              style={{
+                display: 'flex', gap: '10px', fontSize: '0.85rem',
+                background: emailSentStatus.ok ? 'rgba(67, 233, 123, 0.08)' : 'rgba(243, 156, 18, 0.08)',
+                padding: '10px 14px', borderRadius: '8px',
+                border: `1px solid ${emailSentStatus.ok ? 'rgba(67,233,123,0.2)' : 'rgba(243,156,18,0.2)'}`,
+                color: emailSentStatus.ok ? 'var(--color-success)' : '#f39c12',
+                alignItems: 'flex-start'
+              }}
+            >
+              {emailSentStatus.ok ? <CheckCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} /> : <Mail size={16} style={{ flexShrink: 0, marginTop: 2 }} />}
+              <span>{emailSentStatus.message}</span>
             </div>
           )}
 
@@ -659,6 +733,18 @@ export default function UserManagement() {
                       <td style={{ padding: '12px 8px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                           <button
+                            title="Reenviar correo de activación"
+                            className="btn btn-secondary"
+                            style={{ padding: '6px', minWidth: '32px', height: '32px', borderRadius: '6px' }}
+                            onClick={() => handleResendEmail(u)}
+                            disabled={resendingUid === u.id}
+                          >
+                            {resendingUid === u.id
+                              ? <Loader size={14} color="var(--color-primary)" className="loading-spin" />
+                              : <Mail size={14} color="var(--color-primary)" />}
+                          </button>
+
+                          <button
                             title="Cambiar contraseña"
                             className="btn btn-secondary"
                             style={{ padding: '6px', minWidth: '32px', height: '32px', borderRadius: '6px' }}
@@ -689,6 +775,49 @@ export default function UserManagement() {
               </table>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Panel Probar Correo */}
+      <div className="glass-panel" style={{ padding: '20px', borderRadius: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+          <Mail size={18} color="var(--color-primary)" />
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)' }}>Probar Configuración de Correo</h3>
+        </div>
+        <p style={{ fontSize: '0.83rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
+          Envía un correo de prueba para verificar que el SMTP esté funcionando. Si aún no configuraste el correo, ve a <strong>⚙️ Configuración</strong>.
+        </p>
+
+        {testResult && (
+          <div
+            className={testResult.ok ? 'toast toast-success' : 'toast toast-error'}
+            style={{ position: 'relative', bottom: 0, right: 0, width: '100%', transform: 'none', marginBottom: '12px' }}
+          >
+            {testResult.ok ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+            <span>{testResult.message}</span>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <input
+            type="email"
+            className="form-input"
+            style={{ flex: 1 }}
+            value={testEmail}
+            onChange={e => setTestEmail(e.target.value)}
+            placeholder="correo@destino.com"
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ height: '42px', paddingInline: '18px', display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}
+            onClick={handleTestEmail}
+            disabled={testLoading || !testEmail.trim()}
+          >
+            {testLoading
+              ? <><Loader size={14} className="loading-spin" /> Enviando...</>
+              : <><Send size={14} /> Enviar Prueba</>}
+          </button>
         </div>
       </div>
 

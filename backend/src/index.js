@@ -1212,6 +1212,89 @@ app.post('/api/admin/reset-password', checkAdmin, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/resend-welcome-email
+ * Genera un nuevo link de activación y lo envía por correo al usuario.
+ * Protegido: Solo Administradores.
+ */
+app.post('/api/admin/resend-welcome-email', checkAdmin, async (req, res) => {
+  const { uid, email } = req.body;
+  if (!uid || !email) {
+    return res.status(400).json({ error: 'Faltan campos obligatorios: uid, email' });
+  }
+  try {
+    // 1. Generar nuevo link de activación
+    const setupLink = await authAdmin.generatePasswordResetLink(email, {
+      url: 'https://entrega-anla-33385687524.us-central1.run.app'
+    });
+
+    // 2. Verificar que hay config SMTP
+    const settingsDoc = await db.collection('settings').doc('email').get();
+    if (!settingsDoc.exists) {
+      return res.status(400).json({
+        error: 'No hay configuración SMTP guardada. Ve a Configuración para habilitarlo.',
+        setupLink: setupLink
+      });
+    }
+    const cfg = settingsDoc.data();
+    if (!cfg.host || !cfg.user || !cfg.pass) {
+      return res.status(400).json({
+        error: 'La configuración SMTP está incompleta.',
+        setupLink: setupLink
+      });
+    }
+
+    // 3. Enviar correo
+    const transporter = nodemailer.createTransport({
+      host: cfg.host,
+      port: parseInt(cfg.port) || 587,
+      secure: cfg.secure === true || cfg.port === '465',
+      auth: { user: cfg.user, pass: cfg.pass }
+    });
+    const platformName = cfg.platformName || 'ANLA Inteligente';
+    await transporter.sendMail({
+      from: `"${cfg.fromName || platformName}" <${cfg.user}>`,
+      to: email,
+      subject: `Activa tu cuenta en ${platformName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9f9f9; border-radius: 8px; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 32px; text-align: center;">
+            <h1 style="color: #00f2fe; margin: 0; font-size: 24px;">${platformName}</h1>
+            <p style="color: #94a3b8; margin: 8px 0 0 0;">Sistema de Análisis Documental Inteligente</p>
+          </div>
+          <div style="padding: 32px;">
+            <h2 style="color: #1e293b;">Activación de cuenta</h2>
+            <p style="color: #475569; line-height: 1.6;">El administrador ha generado un nuevo enlace de activación para tu cuenta:</p>
+            <p style="background: #e2e8f0; padding: 12px; border-radius: 6px; font-weight: bold; color: #0f172a;">${email}</p>
+            <p style="color: #475569; line-height: 1.6;">Haz clic en el siguiente botón para crear o restablecer tu contraseña:</p>
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="${setupLink}" style="background: linear-gradient(135deg, #00f2fe, #4facfe); color: #000; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">ACTIVAR MI CUENTA</a>
+            </div>
+            <p style="color: #94a3b8; font-size: 13px;">⚠️ Este enlace es válido por 24 horas.</p>
+          </div>
+          <div style="background: #f1f5f9; padding: 16px; text-align: center;">
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">— Equipo ${platformName}</p>
+          </div>
+        </div>
+      `
+    });
+
+    // 4. Actualizar estado en Firestore
+    await db.collection('users').doc(uid).update({
+      lastEmailSentAt: new Date().toISOString(),
+      status: 'PENDING_SETUP'
+    });
+
+    console.log(`[ADMIN] ✅ Correo de activación reenviado a: ${email}`);
+    return res.json({ success: true, message: `Correo de activación enviado exitosamente a ${email}.` });
+
+  } catch (error) {
+    console.error('Error al reenviar correo de bienvenida:', error);
+    return res.status(500).json({ error: `Error al reenviar correo: ${error.message}` });
+  }
+});
+
+
+/**
  * POST /api/admin/delete-user
  * Borra permanentemente una cuenta de Firebase Auth y su perfil en Firestore.
  * Protegido: Solo Administradores.
