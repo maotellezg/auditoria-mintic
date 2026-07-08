@@ -10,6 +10,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { getEmbedding } from './services/embeddings.js';
 import { extractTextFromDocument, splitTextIntoChunks } from './services/chunker.js';
 import { VertexAI } from '@google-cloud/vertexai';
+import nodemailer from 'nodemailer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1098,18 +1099,71 @@ app.post('/api/admin/create-user', checkAdmin, async (req, res) => {
     await db.collection('users').doc(uid).set(userData);
     console.log(`[ADMIN] ✅ Usuario creado con éxito en Firebase y Firestore: ${email}`);
 
+    // 5. Intentar enviar correo de bienvenida automáticamente si hay config SMTP
+    let emailSent = false;
+    let emailError = null;
+    if (setupLink) {
+      try {
+        const settingsDoc = await db.collection('settings').doc('email').get();
+        if (settingsDoc.exists) {
+          const cfg = settingsDoc.data();
+          if (cfg.host && cfg.user && cfg.pass) {
+            const transporter = nodemailer.createTransport({
+              host: cfg.host,
+              port: parseInt(cfg.port) || 587,
+              secure: cfg.secure === true || cfg.port === '465',
+              auth: { user: cfg.user, pass: cfg.pass }
+            });
+            const platformName = cfg.platformName || 'ANLA Inteligente';
+            const fromName = cfg.fromName || platformName;
+            await transporter.sendMail({
+              from: `"${fromName}" <${cfg.user}>`,
+              to: email,
+              subject: `Bienvenido a ${platformName} — Activa tu cuenta`,
+              html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9f9f9; border-radius: 8px; overflow: hidden;">
+                  <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 32px; text-align: center;">
+                    <h1 style="color: #00f2fe; margin: 0; font-size: 24px;">${platformName}</h1>
+                    <p style="color: #94a3b8; margin: 8px 0 0 0;">Sistema de Análisis Documental Inteligente</p>
+                  </div>
+                  <div style="padding: 32px;">
+                    <h2 style="color: #1e293b;">¡Bienvenido!</h2>
+                    <p style="color: #475569; line-height: 1.6;">El administrador de la plataforma ha creado una cuenta para ti con el correo:</p>
+                    <p style="background: #e2e8f0; padding: 12px; border-radius: 6px; font-weight: bold; color: #0f172a;">${email}</p>
+                    <p style="color: #475569; line-height: 1.6;">Para activar tu cuenta y crear tu contraseña personal, haz clic en el siguiente botón:</p>
+                    <div style="text-align: center; margin: 32px 0;">
+                      <a href="${setupLink}" style="background: linear-gradient(135deg, #00f2fe, #4facfe); color: #000; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">ACTIVAR MI CUENTA</a>
+                    </div>
+                    <p style="color: #94a3b8; font-size: 13px;">⚠️ Este enlace es válido por 24 horas. Si no solicitaste este acceso, ignora este correo.</p>
+                  </div>
+                  <div style="background: #f1f5f9; padding: 16px; text-align: center;">
+                    <p style="color: #94a3b8; font-size: 12px; margin: 0;">— Equipo ${platformName}</p>
+                  </div>
+                </div>
+              `
+            });
+            emailSent = true;
+            console.log(`[ADMIN] ✅ Correo de bienvenida enviado a: ${email}`);
+          }
+        }
+      } catch (mailErr) {
+        console.warn('[ADMIN] No se pudo enviar el correo de bienvenida:', mailErr.message);
+        emailError = mailErr.message;
+      }
+    }
+
     return res.json({
       success: true,
-      message: isPasswordless 
-        ? `El usuario ${email} fue creado con éxito. Copia el enlace de activación para compartirlo.`
-        : `El usuario ${email} fue creado con éxito con contraseña temporal.`,
+      message: emailSent
+        ? `El usuario ${email} fue creado y el correo de bienvenida fue enviado automáticamente.`
+        : isPasswordless
+          ? `El usuario ${email} fue creado. Configura el SMTP en Configuración para enviar correos automáticamente.`
+          : `El usuario ${email} fue creado con éxito con contraseña temporal.`,
       setupLink: setupLink,
+      emailSent: emailSent,
+      emailError: emailError,
       isPasswordless: isPasswordless,
-      user: {
-        uid: uid,
-        email: email,
-        role: role
-      }
+      user: { uid, email, role }
     });
 
   } catch (error) {
@@ -1586,6 +1640,87 @@ Genera tu respuesta estructurada y citada según las instrucciones.
       error: 'Error al procesar la consulta del chat.',
       details: error.message
     });
+  }
+});
+
+/**
+ * GET /api/admin/settings
+ * Obtiene la configuración del sistema (SMTP, nombre plataforma).
+ */
+app.get('/api/admin/settings', checkAdmin, async (req, res) => {
+  try {
+    const doc = await db.collection('settings').doc('email').get();
+    if (!doc.exists) return res.json({});
+    const data = doc.data();
+    // Ocultar la contraseña en la respuesta por seguridad
+    return res.json({ ...data, pass: data.pass ? '••••••••' : '' });
+  } catch (error) {
+    console.error('Error al obtener configuración:', error);
+    return res.status(500).json({ error: 'No se pudo obtener la configuración.' });
+  }
+});
+
+/**
+ * POST /api/admin/settings
+ * Guarda la configuración SMTP y general del sistema en Firestore.
+ */
+app.post('/api/admin/settings', checkAdmin, async (req, res) => {
+  const { host, port, secure, user, pass, fromName, platformName } = req.body;
+  if (!host || !user) {
+    return res.status(400).json({ error: 'Host y usuario SMTP son obligatorios.' });
+  }
+  try {
+    const existing = await db.collection('settings').doc('email').get();
+    const existingPass = existing.exists ? existing.data().pass : '';
+    // Si la contraseña llega como bullets, conservar la existente
+    const finalPass = (!pass || pass === '••••••••') ? existingPass : pass;
+    await db.collection('settings').doc('email').set({
+      host, port: port || '587',
+      secure: secure === true || secure === 'true',
+      user, pass: finalPass,
+      fromName: fromName || 'ANLA Inteligente',
+      platformName: platformName || 'ANLA Inteligente',
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    console.log(`[ADMIN] ✅ Configuración SMTP guardada por: ${req.user.email}`);
+    return res.json({ success: true, message: 'Configuración guardada correctamente.' });
+  } catch (error) {
+    console.error('Error al guardar configuración:', error);
+    return res.status(500).json({ error: 'No se pudo guardar la configuración.' });
+  }
+});
+
+/**
+ * POST /api/admin/test-email
+ * Envía un correo de prueba para verificar la configuración SMTP.
+ */
+app.post('/api/admin/test-email', checkAdmin, async (req, res) => {
+  const { to } = req.body;
+  if (!to) return res.status(400).json({ error: 'Dirección de destino obligatoria.' });
+  try {
+    const settingsDoc = await db.collection('settings').doc('email').get();
+    if (!settingsDoc.exists) return res.status(400).json({ error: 'No hay configuración SMTP guardada.' });
+    const cfg = settingsDoc.data();
+    if (!cfg.host || !cfg.user || !cfg.pass) {
+      return res.status(400).json({ error: 'La configuración SMTP está incompleta.' });
+    }
+    const transporter = nodemailer.createTransport({
+      host: cfg.host,
+      port: parseInt(cfg.port) || 587,
+      secure: cfg.secure === true || cfg.port === '465',
+      auth: { user: cfg.user, pass: cfg.pass }
+    });
+    await transporter.sendMail({
+      from: `"${cfg.fromName || 'ANLA Inteligente'}" <${cfg.user}>`,
+      to,
+      subject: `Correo de prueba — ${cfg.platformName || 'ANLA Inteligente'}`,
+      html: `<div style="font-family:Arial,sans-serif;padding:24px;"><h2 style="color:#00f2fe;">✅ Conexión SMTP Exitosa</h2><p>Este es un correo de prueba enviado desde <strong>${cfg.platformName || 'ANLA Inteligente'}</strong>.</p><p>Tu configuración de correo está funcionando correctamente.</p></div>`
+    });
+    console.log(`[ADMIN] ✅ Correo de prueba enviado a: ${to}`);
+    return res.json({ success: true, message: `Correo de prueba enviado exitosamente a ${to}.` });
+  } catch (error) {
+    console.error('Error al enviar correo de prueba:', error);
+    return res.status(500).json({ error: `Error al enviar: ${error.message}` });
   }
 });
 

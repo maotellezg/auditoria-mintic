@@ -10,6 +10,7 @@ import WikiView from './components/WikiView';
 import UserManagement from './components/UserManagement';
 import UserAudit from './components/UserAudit';
 import Chat from './components/Chat';
+import SettingsView from './components/Settings';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { KeyRound, ShieldAlert, AlertCircle, CheckCircle, Eye, EyeOff, X } from 'lucide-react';
 
@@ -343,6 +344,12 @@ function AppContent() {
       case 'auditoria':
         return (
           <UserAudit />
+        );
+      case 'configuracion':
+        return userRole === 'administrador' ? (
+          <SettingsView />
+        ) : (
+          <Dashboard onSelectDoc={(doc) => setSelectedDoc(doc)} />
         );
       default:
         return <Dashboard onSelectDoc={(doc) => setSelectedDoc(doc)} />;

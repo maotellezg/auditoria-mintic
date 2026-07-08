@@ -1,4 +1,4 @@
-import { LayoutDashboard, UploadCloud, BookOpen, LogOut, FileText, Users, History, KeyRound, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, BookOpen, LogOut, FileText, Users, History, KeyRound, MessageSquare, Settings } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword }) {
@@ -72,6 +72,18 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword 
             >
               <Users size={20} />
               <span>Gestión Usuarios</span>
+            </div>
+          </li>
+        )}
+
+        {userRole === 'administrador' && (
+          <li>
+            <div 
+              className={`sidebar-link ${activeTab === 'configuracion' ? 'active' : ''}`}
+              onClick={() => setActiveTab('configuracion')}
+            >
+              <Settings size={20} />
+              <span>Configuración</span>
             </div>
           </li>
         )}
