@@ -175,13 +175,13 @@ Instrucciones criticas:
   parts.push({ text: promptText });
 
   const candidateModels = [
-    'gemini-1.5-flash-001',
-    'gemini-1.5-flash-002',
-    'gemini-2.5-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro-001',
-    'gemini-1.5-pro-002',
-    'gemini-1.5-pro'
+    'gemini-2.5-flash',           // Principal — disponible en proyecto
+    'gemini-2.0-flash-001',       // Fallback 1
+    'gemini-2.0-flash',           // Fallback 2
+    'gemini-2.0-flash-lite',      // Fallback 3 (más liviano)
+    'gemini-2.5-flash-preview-05-20', // Fallback 4
+    'gemini-1.5-flash-001',       // Legado — puede no estar disponible
+    'gemini-1.5-pro',             // Legado — puede no estar disponible
   ];
 
   const startTime = Date.now();
