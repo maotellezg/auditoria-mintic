@@ -213,6 +213,46 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
         </div>
       </div>
 
+      {/* Botones período presidencial */}
+      {(() => {
+        const HOY = new Date().toISOString().slice(0, 10);
+        const PERIODOS = [
+          { id:'todos',  label:'📅 Todos los gobiernos', desde:'2018-08-07', hasta:HOY,         color:'#64748B', bg:'#F1F5F9' },
+          { id:'duque',  label:'🏛️ Gobierno Duque',      desde:'2018-08-07', hasta:'2022-08-06', color:'#214E92', bg:'#EBF1FB', flag:'2018–2022' },
+          { id:'petro',  label:'🌿 Gobierno Petro',       desde:'2022-08-07', hasta:HOY,         color:'#0D7C3D', bg:'#E8F7EE', flag:'2022–hoy'  },
+        ];
+        const periodoActivo = PERIODOS.find(p =>
+          p.desde === filterFechaDesde &&
+          (p.id === 'todos' ? !filterFechaHasta || filterFechaHasta === HOY : p.hasta === filterFechaHasta)
+        )?.id ?? null;
+
+        return (
+          <div style={{ padding:'8px 18px', borderBottom:'1px solid #E8EDF3', display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', background:'#FAFBFC' }}>
+            <span style={{ fontSize:'0.65rem', fontWeight:700, color:'#94A3B8', textTransform:'uppercase', marginRight:'4px' }}>Período:</span>
+            {PERIODOS.map(p => {
+              const activo = periodoActivo === p.id;
+              return (
+                <button key={p.id}
+                  onClick={() => {
+                    setFilterFechaDesde(p.desde);
+                    setFilterFechaHasta(p.id === 'todos' ? '' : p.hasta);
+                    setPage(1); setDetalleIdx(null);
+                  }}
+                  style={{
+                    padding:'5px 14px', borderRadius:'20px', border:`1.5px solid ${activo ? p.color : '#E0E6ED'}`,
+                    background: activo ? p.color : '#FFF', color: activo ? '#FFF' : p.color,
+                    fontWeight: 700, fontSize:'0.78rem', cursor:'pointer', transition:'all 0.18s',
+                    boxShadow: activo ? `0 2px 8px ${p.color}40` : 'none',
+                    display:'inline-flex', alignItems:'center', gap:'5px',
+                  }}>
+                  {p.label}
+                  {p.flag && <span style={{ fontSize:'0.65rem', opacity:0.8, fontWeight:400 }}>({p.flag})</span>}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
       {/* KPIs */}
       {estadisticas && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(120px,1fr))', background:'#F8FAFC', borderBottom:'1px solid #E8EDF3' }}>
