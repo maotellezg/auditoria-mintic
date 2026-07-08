@@ -1070,16 +1070,14 @@ app.post('/api/admin/create-user', checkAdmin, async (req, res) => {
 
     const uid = userRecord.uid;
 
-    // 3. Generar enlace de activación de contraseña de Firebase si es Passwordless
+    // 3. Generar enlace de activación SIEMPRE (para todos los usuarios nuevos, con o sin contraseña)
     let setupLink = null;
-    if (isPasswordless) {
-      try {
-        setupLink = await authAdmin.generatePasswordResetLink(email, {
-          url: 'https://entrega-anla-33385687524.us-central1.run.app' // URL de redirección tras completar
-        });
-      } catch (linkError) {
-        console.warn('No se pudo generar el enlace de configuración de Firebase:', linkError.message);
-      }
+    try {
+      setupLink = await authAdmin.generatePasswordResetLink(email, {
+        url: 'https://entrega-anla-33385687524.us-central1.run.app'
+      });
+    } catch (linkError) {
+      console.warn('No se pudo generar el enlace de configuración de Firebase:', linkError.message);
     }
 
     // 4. Registrar el perfil y su rol en la colección de Firestore con los flags correspondientes
