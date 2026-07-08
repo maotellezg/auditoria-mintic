@@ -1,63 +1,48 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Send, Sparkles, User, Bot, FileText, Filter, 
-  Trash2, HelpCircle, Loader, MessageSquare, 
-  ChevronRight, Compass, ShieldAlert, Cpu
+  Send, Bot, FileText, Trash2, Loader, MessageSquare, Cpu, User
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Chat({ onSelectDoc }) {
   const { currentUser } = useAuth();
   
-  // Estados para el chatbot
-  const [messages, setMessages] = useState([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: '¡Hola! Bienvenido a **Anla-Chat**, tu asistente de análisis documental inteligente. Puedo buscar, leer y extraer respuestas exactas en base a todo el corpus de resoluciones, licencias, autos e informes ambientales que han sido analizados.\n\nEscribe tu pregunta abajo. Opcionalmente, puedes usar la barra superior de **Filtros** para restringir mi búsqueda semántica a un sector, empresa o territorio específico.',
-      citations: [],
-      timestamp: new Date().toISOString()
+  // Estados para el chatbot con persistencia local
+  const [messages, setMessages] = useState(() => {
+    if (currentUser) {
+      const saved = localStorage.getItem(`anla_chat_messages_${currentUser.uid}`);
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error('Error al parsear mensajes del chat:', e);
+        }
+      }
     }
-  ]);
+    return [
+      {
+        id: 'welcome',
+        role: 'assistant',
+        content: '¡Hola! Bienvenido a **Anla-Chat**, tu asistente de análisis documental inteligente. Puedo buscar, leer y extraer respuestas exactas en base a todo el corpus de resoluciones, licencias, autos e informes ambientales que han sido analizados.\n\nEscribe tu pregunta abajo para comenzar.',
+        citations: [],
+        timestamp: new Date().toISOString()
+      }
+    ];
+  });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetchingDoc, setFetchingDoc] = useState(false);
 
-  // Estados para Filtros
-  const [sectors, setSectors] = useState([]);
-  const [companies, setCompanies] = useState([]);
-  const [territories, setTerritories] = useState([]);
-  
-  const [selectedSector, setSelectedSector] = useState('TODOS');
-  const [selectedCompany, setSelectedCompany] = useState('TODAS');
-  const [selectedTerritory, setSelectedTerritory] = useState('TODAS');
-
   const messagesEndRef = useRef(null);
 
-  // Cargar Filtros dinámicos de la base de datos
+  // Guardar mensajes en localStorage automáticamente ante cualquier cambio
   useEffect(() => {
-    async function loadFilters() {
-      try {
-        const idToken = await currentUser.getIdToken();
-        const res = await fetch('/api/chat/filters', {
-          headers: {
-            'Authorization': `Bearer ${idToken}`
-          }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setSectors(data.sectors || []);
-          setCompanies(data.companies || []);
-          setTerritories(data.territories || []);
-        }
-      } catch (err) {
-        console.error('Error al cargar filtros del chat:', err);
-      }
+    if (currentUser && messages.length > 0) {
+      localStorage.setItem(`anla_chat_messages_${currentUser.uid}`, JSON.stringify(messages));
     }
-    loadFilters();
-  }, [currentUser]);
+  }, [messages, currentUser]);
 
-  // Auto-scroll
+  // Auto-scroll al recibir mensajes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
@@ -83,10 +68,10 @@ export default function Chat({ onSelectDoc }) {
     try {
       const idToken = await currentUser.getIdToken();
       
-      const filters = {};
-      if (selectedSector !== 'TODOS') filters.sector = selectedSector;
-      if (selectedCompany !== 'TODAS') filters.company = selectedCompany;
-      if (selectedTerritory !== 'TODAS') filters.region = selectedTerritory;
+      // Obtener historial relevante de los mensajes (excluyendo el de bienvenida)
+      const history = messages
+        .filter(m => m.id !== 'welcome')
+        .map(m => ({ role: m.role, content: m.content }));
 
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -96,7 +81,7 @@ export default function Chat({ onSelectDoc }) {
         },
         body: JSON.stringify({
           message: userMessageText,
-          filters: Object.keys(filters).length > 0 ? filters : null
+          history: history
         })
       });
 
@@ -122,7 +107,7 @@ export default function Chat({ onSelectDoc }) {
       const errMsg = {
         id: `err-${Date.now()}`,
         role: 'assistant',
-        content: `⚠️ Lo siento, ocurrió un error inesperado al procesar tu pregunta:\n\n*${err.message || 'Error de conexión con el servidor.'}*\n\nPor favor, verifica tus filtros e intenta de nuevo.`,
+        content: `⚠️ Lo siento, ocurrió un error inesperado al procesar tu pregunta:\n\n*${err.message || 'Error de conexión con el servidor.'}*\n\nPor favor, intenta de nuevo.`,
         error: true,
         timestamp: new Date().toISOString()
       };
@@ -132,17 +117,23 @@ export default function Chat({ onSelectDoc }) {
     }
   };
 
-  // Limpiar chat
+  // Limpiar chat con confirmación
   const clearChat = () => {
-    setMessages([
-      {
-        id: 'welcome',
-        role: 'assistant',
-        content: 'Chat reiniciado. ¿En qué expediente o trámite ambiental de la ANLA te puedo colaborar hoy?',
-        citations: [],
-        timestamp: new Date().toISOString()
+    if (window.confirm('¿Estás seguro de que deseas limpiar el historial de este chat?')) {
+      const defaultMessages = [
+        {
+          id: 'welcome',
+          role: 'assistant',
+          content: 'Chat reiniciado. ¿En qué expediente o trámite ambiental de la ANLA te puedo colaborar hoy?',
+          citations: [],
+          timestamp: new Date().toISOString()
+        }
+      ];
+      setMessages(defaultMessages);
+      if (currentUser) {
+        localStorage.setItem(`anla_chat_messages_${currentUser.uid}`, JSON.stringify(defaultMessages));
       }
-    ]);
+    }
   };
 
   // Clic en Citación: Recupera documento completo y lo abre en el visor global
@@ -173,10 +164,6 @@ export default function Chat({ onSelectDoc }) {
   const renderMessageContent = (text) => {
     if (!text) return null;
 
-    // Primero formatear negritas básicas (**texto**)
-    const boldRegex = /\*\*([^*]+)\*\*/g;
-    let formattedText = text;
-    
     // Regex de citas [Doc:id|name]
     const citationRegex = /\[Doc:([^|\]]+)\|([^\]]+)\]/g;
     const parts = [];
@@ -245,7 +232,7 @@ export default function Chat({ onSelectDoc }) {
   };
 
   return (
-    <div className="chat-layout">
+    <div className="chat-layout" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Overlay de Carga para abrir visor */}
       {fetchingDoc && (
         <div style={{
@@ -268,74 +255,36 @@ export default function Chat({ onSelectDoc }) {
         </div>
       )}
 
-      {/* Barra de Filtros Premium */}
-      <div className="chat-filters-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)', marginRight: '12px' }}>
-          <Filter size={18} />
-          <span style={{ fontWeight: 700, fontSize: '0.9rem', textTransform: 'uppercase' }}>Filtros de Chat</span>
+      {/* Cabecera del Chat Inteligente */}
+      <div style={{ 
+        padding: '16px 20px', 
+        borderBottom: '1px solid var(--border-color)', 
+        background: 'rgba(255, 255, 255, 0.01)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px'
+      }}>
+        <div style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '8px',
+          background: 'rgba(0, 242, 254, 0.1)',
+          border: '1px solid rgba(0, 242, 254, 0.2)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          color: 'var(--color-primary)'
+        }}>
+          <MessageSquare size={16} />
         </div>
-
-        {/* Sector */}
-        <div className="chat-filter-item">
-          <label className="chat-filter-label">Sector</label>
-          <select 
-            className="chat-filter-select"
-            value={selectedSector}
-            onChange={(e) => setSelectedSector(e.target.value)}
-          >
-            <option value="TODOS">TODOS LOS SECTORES</option>
-            {sectors.map((s, idx) => (
-              <option key={idx} value={s}>{s}</option>
-            ))}
-          </select>
+        <div>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>Anla-Chat</h3>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>RAG Inteligente • Consulta unificada de todo el corpus documental</p>
         </div>
-
-        {/* Empresa */}
-        <div className="chat-filter-item">
-          <label className="chat-filter-label">Empresa / Interesado</label>
-          <select 
-            className="chat-filter-select"
-            value={selectedCompany}
-            onChange={(e) => setSelectedCompany(e.target.value)}
-          >
-            <option value="TODAS">TODAS LAS EMPRESAS</option>
-            {companies.map((c, idx) => (
-              <option key={idx} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Territorio */}
-        <div className="chat-filter-item">
-          <label className="chat-filter-label">Territorio (Región / CAR)</label>
-          <select 
-            className="chat-filter-select"
-            value={selectedTerritory}
-            onChange={(e) => setSelectedTerritory(e.target.value)}
-          >
-            <option value="TODAS">TODAS LAS REGIONES</option>
-            {territories.map((t, idx) => (
-              <option key={idx} value={t}>{t}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Limpiar Filtros */}
-        <button 
-          className="btn btn-secondary" 
-          style={{ padding: '6px 14px', fontSize: '0.8rem', height: '34px', alignSelf: 'flex-end', marginLeft: 'auto' }}
-          onClick={() => {
-            setSelectedSector('TODOS');
-            setSelectedCompany('TODAS');
-            setSelectedTerritory('TODAS');
-          }}
-        >
-          Limpiar Filtros
-        </button>
       </div>
 
       {/* Panel de Mensajes */}
-      <div className="chat-messages-container">
+      <div className="chat-messages-container" style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
         {messages.map((msg) => (
           <div 
             key={msg.id} 
@@ -402,7 +351,7 @@ export default function Chat({ onSelectDoc }) {
             </div>
             <div className="chat-msg-content" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="loading-spin" style={{ display: 'inline-block', width: '14px', height: '14px', border: '2px solid var(--color-success)', borderTopColor: 'transparent', borderRadius: '50%' }}></span>
-              <span style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>Anla-Chat está analizando el corpus en base a tus filtros...</span>
+              <span style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>Anla-Chat está analizando todo el corpus documental...</span>
             </div>
           </div>
         )}
@@ -411,7 +360,7 @@ export default function Chat({ onSelectDoc }) {
       </div>
 
       {/* Formulario de Entrada */}
-      <form onSubmit={handleSend} className="chat-input-container">
+      <form onSubmit={handleSend} className="chat-input-container" style={{ padding: '20px', borderTop: '1px solid var(--border-color)', background: 'rgba(255, 255, 255, 0.01)' }}>
         <button
           type="button"
           onClick={clearChat}

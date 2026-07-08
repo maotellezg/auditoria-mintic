@@ -1444,10 +1444,10 @@ app.get('/api/chat/filters', checkUser, async (req, res) => {
 
 /**
  * POST /api/chat
- * Chatbot inteligente (RAG) con filtros y citación estructurada.
+ * Chatbot inteligente (RAG) con historial de conversación (memoria) y citación estructurada.
  */
 app.post('/api/chat', checkUser, async (req, res) => {
-  const { message, filters } = req.body;
+  const { message, history } = req.body;
   const userId = req.user.uid;
   const userEmail = req.user.email;
 
@@ -1455,7 +1455,7 @@ app.post('/api/chat', checkUser, async (req, res) => {
     return res.status(400).json({ error: 'La pregunta o mensaje del chat es obligatoria.' });
   }
 
-  console.log(`[RAG Chat] Nueva pregunta de ${userEmail}: "${message}" con filtros:`, filters);
+  console.log(`[RAG Chat] Nueva pregunta de ${userEmail}: "${message}"`);
 
   const startTime = Date.now();
 
@@ -1463,88 +1463,27 @@ app.post('/api/chat', checkUser, async (req, res) => {
     // 1. Generar embedding de la consulta del usuario
     const queryVector = await getEmbedding(message);
 
-    // 2. Realizar búsqueda vectorial en Firestore
-    let query = db.collection('document_chunks');
-    
-    // Aplicar filtros de pre-filtrado si existen y están seleccionados
-    if (filters) {
-      if (filters.sector && filters.sector !== 'TODOS') {
-        query = query.where('sector', '==', filters.sector);
-      }
-      if (filters.company && filters.company !== 'TODAS') {
-        query = query.where('company', '==', filters.company);
-      }
-      if (filters.region && filters.region !== 'TODAS') {
-        query = query.where('region', '==', filters.region);
-      }
-    }
-
-    let querySnapshot;
-    let fallbackUsed = false;
-
-    try {
-      const vectorQuery = query.findNearest({
-        vectorField: 'embedding',
-        queryVector: FieldValue.vector(queryVector),
-        limit: 15,
-        distanceMeasure: 'COSINE',
-        distanceResultField: 'distance'
-      });
-      querySnapshot = await vectorQuery.get();
-    } catch (err) {
-      console.warn('[RAG Chat] Búsqueda vectorial filtrada falló (falta de índice). Activando fallback en memoria:', err.message);
-      fallbackUsed = true;
-      
-      // Fallback: buscar los 100 fragmentos más relevantes globalmente y filtrar en memoria
-      const vectorQuery = db.collection('document_chunks').findNearest({
-        vectorField: 'embedding',
-        queryVector: FieldValue.vector(queryVector),
-        limit: 100,
-        distanceMeasure: 'COSINE',
-        distanceResultField: 'distance'
-      });
-      const fullSnapshot = await vectorQuery.get();
-
-      const filteredDocs = [];
-      fullSnapshot.forEach(doc => {
-        const data = doc.data();
-        let matches = true;
-        
-        if (filters) {
-          if (filters.sector && filters.sector !== 'TODOS' && data.sector !== filters.sector) {
-            matches = false;
-          }
-          if (filters.company && filters.company !== 'TODAS' && data.company !== filters.company) {
-            matches = false;
-          }
-          if (filters.region && filters.region !== 'TODAS' && data.region !== filters.region) {
-            matches = false;
-          }
-        }
-
-        if (matches) {
-          filteredDocs.push({ id: doc.id, ...data });
-        }
-      });
-
-      querySnapshot = filteredDocs.slice(0, 15);
-    }
+    // 2. Realizar búsqueda vectorial directa en Firestore (con el índice READY)
+    const vectorQuery = db.collection('document_chunks').findNearest({
+      vectorField: 'embedding',
+      queryVector: FieldValue.vector(queryVector),
+      limit: 15,
+      distanceMeasure: 'COSINE',
+      distanceResultField: 'distance'
+    });
+    const querySnapshot = await vectorQuery.get();
 
     // 3. Extraer texto y estructurar chunks
     const chunks = [];
-    if (Array.isArray(querySnapshot)) {
-      chunks.push(...querySnapshot);
-    } else {
-      querySnapshot.forEach(doc => {
-        chunks.push({ id: doc.id, ...doc.data() });
-      });
-    }
+    querySnapshot.forEach(doc => {
+      chunks.push({ id: doc.id, ...doc.data() });
+    });
 
     console.log(`[RAG Chat] Encontrados ${chunks.length} fragmentos de contexto para responder.`);
 
     if (chunks.length === 0) {
       return res.json({
-        response: 'No se encontraron documentos o fragmentos relevantes para responder a tu pregunta con los filtros seleccionados. Por favor intenta cambiar los filtros o cargar nuevos documentos.',
+        response: 'No se encontraron documentos o fragmentos relevantes para responder a tu pregunta en el corpus indexado.',
         citations: [],
         iaMetadata: {
           modelUsed: 'gemini-2.5-flash',
@@ -1559,17 +1498,28 @@ app.post('/api/chat', checkUser, async (req, res) => {
       return `[Fragmento ${idx + 1}] (Documento ID: ${chunk.docId}, Nombre del archivo: "${chunk.fileName}"):\n${chunk.text}`;
     }).join('\n\n');
 
-    // 5. Enviar a Gemini para generar respuesta
+    // 5. Formatear el historial de chat para darle memoria al modelo
+    let historyText = '';
+    if (Array.isArray(history) && history.length > 0) {
+      // Filtrar últimos 10 mensajes del historial para no saturar contexto
+      const relevantHistory = history.slice(-10);
+      historyText = relevantHistory.map(h => {
+        const roleLabel = h.role === 'user' ? 'Usuario' : 'Asistente (Anla-Chat)';
+        return `${roleLabel}: ${h.content}`;
+      }).join('\n');
+    }
+
+    // 6. Enviar a Gemini para generar respuesta con memoria
     const systemPrompt = `
 Eres "Anla-Chat", un chatbot inteligente experto de la ANLA (Autoridad Nacional de Licencias Ambientales) de Colombia.
-Tu tarea es responder la pregunta del usuario utilizando de manera única, estricta e íntegra la información provista en los fragmentos de contexto adjuntos.
+Tu tarea es responder la PREGUNTA ACTUAL del usuario de manera profesional, clara y estructurada en español formal.
 
 Instrucciones Críticas:
-1. Responde de manera profesional, clara y estructurada en español formal.
-2. CITAS OBLIGATORIAS: Cada vez que afirmes algo basado en un fragmento de contexto, debes citar inmediatamente al final de la oración usando la nomenclatura exacta \`[Doc:docId|fileName]\` de donde proviene. Por ejemplo: "La ANLA impuso una sanción a Ecopetrol por vertimientos en el Río Sogamoso [Doc:abc123DocId|resolucion_sancion.pdf]".
-3. Nunca inventes los IDs de documento ni nombres de archivo. Usa exactamente el 'Documento ID' y 'Nombre del archivo' provistos en cada fragmento.
-4. Si la información necesaria para responder no se encuentra en el contexto, indícalo de manera amable diciendo que no cuentas con la información específica en los expedientes indexados. No respondas con conocimientos externos que no estén respaldados por el contexto provisto.
-5. Haz uso de formato markdown básico (listas, negritas) para estructurar tu respuesta de forma atractiva y premium.
+1. CITAS OBLIGATORIAS: Cada vez que afirmes algo basado en el contexto de documentos indexados provisto, debes citar inmediatamente al final de la oración usando la nomenclatura exacta \`[Doc:docId|fileName]\` de donde proviene. Por ejemplo: "La ANLA impuso una sanción a Ecopetrol por vertimientos en el Río Sogamoso [Doc:abc123DocId|resolucion_sancion.pdf]".
+2. Nunca inventes los IDs de documento ni nombres de archivo. Usa exactamente el 'Documento ID' y 'Nombre del archivo' provistos en el contexto de fragmentos.
+3. Memoria/Historial: Tienes a tu disposición el historial previo de la conversación. Utilízalo únicamente para comprender referencias relativas (ej. "él", "ella", "esta empresa", "anterior") pero dale prioridad estricta a responder la PREGUNTA ACTUAL usando el contexto adjunto.
+4. Si la información necesaria para responder no se encuentra en el contexto provisto, indícalo de manera amable diciendo que no cuentas con la información específica en los expedientes indexados. No respondas con conocimientos externos.
+5. Haz uso de formato markdown básico (listas, negritas) para estructurar tu respuesta de forma atractiva.
 `;
 
     const modelInstance = vertexAI.getGenerativeModel({
@@ -1578,10 +1528,11 @@ Instrucciones Críticas:
     });
 
     const promptText = `
-PREGUNTA DEL USUARIO:
+${historyText ? `HISTORIAL DE LA CONVERSACIÓN (MEMORIA):\n${historyText}\n\n` : ''}
+PREGUNTA ACTUAL DEL USUARIO:
 "${message}"
 
-CONTEXTO DE DOCUMENTOS INDEXADOS:
+CONTEXTO DE DOCUMENTOS INDEXADOS (Usa únicamente esta información para responder a la PREGUNTA ACTUAL):
 ${contextText}
 
 Genera tu respuesta estructurada y citada según las instrucciones.
@@ -1597,7 +1548,7 @@ Genera tu respuesta estructurada y citada según las instrucciones.
     const durationMs = Date.now() - startTime;
     const tokens = response.usageMetadata || null;
 
-    // 6. Extraer las citas únicas presentes en el texto
+    // 7. Extraer las citas únicas presentes en el texto
     const citationsRegex = /\[Doc:([^|\]]+)\|([^\]]+)\]/g;
     const citationsMap = new Map();
     let match;
@@ -1610,11 +1561,9 @@ Genera tu respuesta estructurada y citada según las instrucciones.
       fileName
     }));
 
-    // 7. Guardar en auditoría general y auditoría de IA
+    // 8. Guardar en auditoría
     await logAuditEvent(userId, userEmail, 'IA_CHAT', {
       query: message,
-      filters: filters || null,
-      fallbackUsed: fallbackUsed,
       durationMs: durationMs,
       tokensUsed: tokens ? tokens.totalTokenCount : null,
       modelUsed: 'gemini-2.5-flash',
