@@ -357,6 +357,8 @@ const BQ_TABLE_CONFIG = {
     estadoField:     'estado_contrato',
     proveedorField:  'proveedor_adjudicado',
     docProvField:    'documento_proveedor',
+    sortFields: ['referencia_del_contrato','proveedor_adjudicado','objeto_del_contrato',
+                 'tipo_de_contrato','estado_contrato','fecha_de_firma','valor_del_contrato'],
   },
   secop_ii_procesos: {
     table: 'secop_ii_procesos',
@@ -368,6 +370,8 @@ const BQ_TABLE_CONFIG = {
     estadoField:     'estado_del_procedimiento',
     proveedorField:  'nombre_del_proveedor',
     docProvField:    'nit_del_proveedor_adjudicado',
+    sortFields: ['referencia_del_proceso','nombre_del_proveedor','descripcion_del_procedimiento',
+                 'tipo_de_contrato','estado_del_procedimiento','fecha_de_publicacion','precio_base'],
   },
   tienda_virtual: {
     table: 'tienda_virtual',
@@ -377,6 +381,7 @@ const BQ_TABLE_CONFIG = {
     tipoField:    'agregacion',
     estadoField:  'estado',
     // Sin filtros extra en Tienda Virtual
+    sortFields: ['identificador_de_la_orden','proveedor','items','agregacion','estado','fecha','total'],
   },
 };
 
@@ -396,10 +401,17 @@ export async function querySecopBQ(tabla, entidadId, modo, opts = {}) {
     tipo = '', modalidad = '', estado = '',
     proveedor_nombre = '', doc_proveedor = '',
     fechaDesde = '', fechaHasta = '',
+    sortField = '', sortDir = 'DESC',
   } = opts;
   const fullTable = `\`${PROJECT_ID}.${DATASET_ID}.${cfg.table}\``;
 
   const esc = (s) => s.replace(/'/g, "''").replace(/%/g, '\\%');
+
+  // Seguridad: solo campos permitidos en ORDER BY
+  const allowedSort = cfg.sortFields || [cfg.dateField];
+  const orderField  = allowedSort.includes(sortField) ? sortField : cfg.dateField;
+  const orderDir    = sortDir === 'ASC' ? 'ASC' : 'DESC';
+
 
   const conditions = [
     `'${entidadId}' IN UNNEST(entidades_mintic)`,
@@ -433,8 +445,9 @@ export async function querySecopBQ(tabla, entidadId, modo, opts = {}) {
            ARRAY_TO_STRING(roles_mintic, ',')     AS roles_mintic_str
     FROM ${fullTable}
     WHERE ${where}
-    ORDER BY ${cfg.dateField} DESC NULLS LAST
+    ORDER BY ${orderField} ${orderDir} NULLS LAST
     LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
+
   `;
 
   // Consulta de conteo y valor total

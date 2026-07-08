@@ -78,8 +78,21 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
     setFilterProveedor(''); setFilterDocProv('');
     setFilterFechaDesde(''); setFilterFechaHasta('');
     setLocalSearch('');
+    setSortCol(''); setSortDir('DESC');
   };
 
+  // Ordenamiento
+  const [sortCol, setSortCol] = useState('');
+  const [sortDir, setSortDir] = useState('DESC');
+  const toggleSort = (bqField) => {
+    if (sortCol === bqField) {
+      setSortDir(d => d === 'DESC' ? 'ASC' : 'DESC');
+    } else {
+      setSortCol(bqField);
+      setSortDir('DESC');
+    }
+    setPage(1);
+  };
 
   const fetchData = useCallback(async (pg = 1) => {
     if (!entidad || !currentUser) return;
@@ -96,6 +109,9 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
       if (filterDocProv)    params.append('doc_proveedor',    filterDocProv);
       if (filterFechaDesde) params.append('fechaDesde',       filterFechaDesde);
       if (filterFechaHasta) params.append('fechaHasta',       filterFechaHasta);
+      if (sortCol)          params.append('sortField',        sortCol);
+      params.append('sortDir', sortDir);
+
 
       const resp = await fetch(`/api/secop/bq/${fuente.id}/${entidad.id}?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -122,10 +138,11 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
       setEstadisticas({ total: data.total||0, valorTotal: data.valor_total||0, enEjecucion: data.en_ejecucion||0, conAdicion: data.con_adicion||0 });
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
-  }, [entidad, currentUser, fuente.id, modo, filterTipo, filterModalidad, filterEstado, filterProveedor, filterDocProv, filterFechaDesde, filterFechaHasta, search]);
+  }, [entidad, currentUser, fuente.id, modo, filterTipo, filterModalidad, filterEstado, filterProveedor, filterDocProv, filterFechaDesde, filterFechaHasta, sortCol, sortDir, search]);
 
   useEffect(() => { setPage(1); setContratos([]); setEstadisticas(null); setDetalleIdx(null); fetchData(1); },
-    [entidad, fuente.id, modo, filterTipo, filterModalidad, filterEstado, filterProveedor, filterDocProv, filterFechaDesde, filterFechaHasta, search]);
+    [entidad, fuente.id, modo, filterTipo, filterModalidad, filterEstado, filterProveedor, filterDocProv, filterFechaDesde, filterFechaHasta, sortCol, sortDir, search]);
+
 
   useEffect(() => { const t = setTimeout(() => setSearch(localSearch), 600); return () => clearTimeout(t); }, [localSearch]);
 
@@ -345,12 +362,48 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
         <div style={{ overflowX:'auto' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.79rem' }}>
             <thead>
-              <tr style={{ background:'#F8FAFC', borderBottom:'1px solid #E8EDF3' }}>
-                {['Referencia / ID', esProveedor?'Entidad Contratante':'Proveedor / Contratista', 'Objeto', 'Tipo', 'Estado', 'Fecha', 'Valor COP', 'Detalle'].map(h =>
-                  <th key={h} style={{ padding:'8px 11px', textAlign:'left', fontWeight:700, color:'#475569', textTransform:'uppercase', fontSize:'0.63rem', letterSpacing:'0.04em', whiteSpace:'nowrap' }}>{h}</th>
-                )}
+              <tr style={{ background:'#F0F4F8', borderBottom:'2px solid #E2E8F0' }}>
+                {[
+                  // [label, bqField-contratos, bqField-procesos, bqField-tienda]
+                  { label:'Referencia / ID',    c:'referencia_del_contrato', p:'referencia_del_proceso',  t:'identificador_de_la_orden' },
+                  { label: esProveedor ? 'Entidad Contratante' : 'Proveedor / Contratista',
+                                                c:'proveedor_adjudicado',     p:'nombre_del_proveedor',     t:'proveedor' },
+                  { label:'Objeto',             c:'objeto_del_contrato',      p:'descripcion_del_procedimiento', t:'items' },
+                  { label:'Tipo',               c:'tipo_de_contrato',         p:'tipo_de_contrato',         t:'agregacion' },
+                  { label:'Estado',             c:'estado_contrato',          p:'estado_del_procedimiento', t:'estado' },
+                  { label:'Fecha',              c:'fecha_de_firma',           p:'fecha_de_publicacion',     t:'fecha' },
+                  { label:'Valor COP',          c:'valor_del_contrato',       p:'precio_base',              t:'total' },
+                  { label:'Detalle',            c:null,                       p:null,                       t:null },
+                ].map(col => {
+                  const bqField = fuente.id === 'tienda_virtual' ? col.t :
+                                  fuente.id === 'secop_ii_procesos' ? col.p : col.c;
+                  const active  = sortCol === bqField && bqField !== null;
+                  return (
+                    <th key={col.label}
+                      onClick={() => bqField && toggleSort(bqField)}
+                      style={{
+                        padding:'9px 11px', textAlign:'left', fontWeight:700,
+                        color: active ? hColor : '#475569',
+                        textTransform:'uppercase', fontSize:'0.63rem', letterSpacing:'0.04em',
+                        whiteSpace:'nowrap', userSelect:'none',
+                        cursor: bqField ? 'pointer' : 'default',
+                        background: active ? `${hColor}10` : 'transparent',
+                        transition:'background 0.15s, color 0.15s',
+                      }}>
+                      <span style={{ display:'inline-flex', alignItems:'center', gap:'4px' }}>
+                        {col.label}
+                        {bqField && (
+                          <span style={{ fontSize:'0.7rem', opacity: active ? 1 : 0.3, color: active ? hColor : '#94A3B8' }}>
+                            {active ? (sortDir === 'DESC' ? '▼' : '▲') : '⇅'}
+                          </span>
+                        )}
+                      </span>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
+
             <tbody>
               {contratos.map((c, idx) => {
                 const abierto = detalleIdx === idx;

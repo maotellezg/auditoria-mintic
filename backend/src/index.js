@@ -2285,6 +2285,8 @@ app.get('/api/secop/bq/:tabla/:entidadId', checkUser, async (req, res) => {
       doc_proveedor:    req.query.doc_proveedor    || '',
       fechaDesde:       req.query.fechaDesde       || '',
       fechaHasta:       req.query.fechaHasta       || '',
+      sortField:        req.query.sortField        || '',
+      sortDir:          req.query.sortDir          || 'DESC',
     });
     return res.json(result);
   } catch (err) {
