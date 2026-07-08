@@ -456,6 +456,23 @@ export async function querySecopBQ(tabla, entidadId, modo, opts = {}) {
 
   const count = countRows[0] || { total: 0, valor_total: 0, en_ejecucion: 0, con_adicion: 0 };
 
+  // BigQuery devuelve DATE/TIMESTAMP como objetos { value: 'YYYY-MM-DD' }
+  // y FLOAT64/INT64 como BigInt. Los serializamos a tipos primitivos.
+  const serialize = (rows) => rows.map(row => {
+    const out = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (v === null || v === undefined) { out[k] = null; continue; }
+      if (typeof v === 'bigint') { out[k] = Number(v); continue; }
+      if (typeof v === 'object' && !Array.isArray(v) && v.value !== undefined) {
+        // BigQuery Date / Time / Timestamp / DatetimeValue
+        out[k] = String(v.value).slice(0, 10); // 'YYYY-MM-DD'
+        continue;
+      }
+      out[k] = v;
+    }
+    return out;
+  });
+
   return {
     total:        Number(count.total),
     valor_total:  Number(count.valor_total),
@@ -463,7 +480,7 @@ export async function querySecopBQ(tabla, entidadId, modo, opts = {}) {
     con_adicion:  Number(count.con_adicion),
     limit:        parseInt(limit),
     offset:       parseInt(offset),
-    data:         dataRows,
+    data:         serialize(dataRows),  // fechas y BigInt serializados
     fuente:       'bigquery',
     tabla,
   };

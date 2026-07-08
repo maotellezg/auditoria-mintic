@@ -66,13 +66,18 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
   // Filtros específicos Contratos/Procesos
   const [filterProveedor, setFilterProveedor]   = useState('');
   const [filterDocProv, setFilterDocProv]       = useState('');
+  // Rango de fechas (todos los paneles)
+  const [filterFechaDesde, setFilterFechaDesde] = useState('');
+  const [filterFechaHasta, setFilterFechaHasta] = useState('');
   const [showFilters, setShowFilters]     = useState(false);
   const pageSize = 100;
 
   // Reset filtros al cambiar fuente
   const resetFilters = () => {
     setFilterTipo(''); setFilterModalidad(''); setFilterEstado('');
-    setFilterProveedor(''); setFilterDocProv(''); setLocalSearch('');
+    setFilterProveedor(''); setFilterDocProv('');
+    setFilterFechaDesde(''); setFilterFechaHasta('');
+    setLocalSearch('');
   };
 
 
@@ -89,6 +94,8 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
       if (filterEstado)     params.append('estado',           filterEstado);
       if (filterProveedor)  params.append('proveedor_nombre', filterProveedor);
       if (filterDocProv)    params.append('doc_proveedor',    filterDocProv);
+      if (filterFechaDesde) params.append('fechaDesde',       filterFechaDesde);
+      if (filterFechaHasta) params.append('fechaHasta',       filterFechaHasta);
 
       const resp = await fetch(`/api/secop/bq/${fuente.id}/${entidad.id}?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -115,10 +122,11 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
       setEstadisticas({ total: data.total||0, valorTotal: data.valor_total||0, enEjecucion: data.en_ejecucion||0, conAdicion: data.con_adicion||0 });
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
-  }, [entidad, currentUser, fuente.id, modo, filterTipo, filterModalidad, filterEstado, filterProveedor, filterDocProv, search]);
+  }, [entidad, currentUser, fuente.id, modo, filterTipo, filterModalidad, filterEstado, filterProveedor, filterDocProv, filterFechaDesde, filterFechaHasta, search]);
 
   useEffect(() => { setPage(1); setContratos([]); setEstadisticas(null); setDetalleIdx(null); fetchData(1); },
-    [entidad, fuente.id, modo, filterTipo, filterModalidad, filterEstado, filterProveedor, filterDocProv, search]);
+    [entidad, fuente.id, modo, filterTipo, filterModalidad, filterEstado, filterProveedor, filterDocProv, filterFechaDesde, filterFechaHasta, search]);
+
   useEffect(() => { const t = setTimeout(() => setSearch(localSearch), 600); return () => clearTimeout(t); }, [localSearch]);
 
 
@@ -213,9 +221,10 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
             style={{ width:'100%', paddingLeft:'28px', padding:'6px 8px 6px 28px', border:'1.5px solid #E0E6ED', borderRadius:'6px', fontSize:'0.8rem', background:'#FFF', boxSizing:'border-box' }}/>
         </div>
         <button onClick={() => setShowFilters(f=>!f)} style={{ padding:'6px 10px', borderRadius:'6px', border:`1.5px solid ${showFilters?hColor:'#E0E6ED'}`, background:showFilters?`${hColor}15`:'#FFF', color:hColor, fontWeight:600, cursor:'pointer', fontSize:'0.75rem', display:'flex', alignItems:'center', gap:'4px' }}>
-          <Filter size={11}/> Filtros {(filterTipo||filterModalidad||filterEstado||filterProveedor||filterDocProv) && <span style={{ background:hColor, color:'#FFF', borderRadius:'50%', width:'14px', height:'14px', fontSize:'0.6rem', display:'inline-flex', alignItems:'center', justifyContent:'center', marginLeft:'2px' }}>✓</span>}
+          <Filter size={11}/> Filtros {(filterTipo||filterModalidad||filterEstado||filterProveedor||filterDocProv||filterFechaDesde||filterFechaHasta) && <span style={{ background:hColor, color:'#FFF', borderRadius:'50%', width:'14px', height:'14px', fontSize:'0.6rem', display:'inline-flex', alignItems:'center', justifyContent:'center', marginLeft:'2px' }}>✓</span>}
         </button>
-        {(filterTipo||filterModalidad||filterEstado||filterProveedor||filterDocProv||localSearch) && (
+        {(filterTipo||filterModalidad||filterEstado||filterProveedor||filterDocProv||filterFechaDesde||filterFechaHasta||localSearch) && (
+
           <button onClick={()=>{ resetFilters(); }} style={{ padding:'6px 8px', borderRadius:'6px', border:'1px solid #E0E6ED', background:'#FFF', cursor:'pointer', color:'#C0392B', fontSize:'0.72rem', fontWeight:600, display:'flex', alignItems:'center', gap:'3px' }}>
             <X size={10}/> Limpiar todo
           </button>
@@ -238,7 +247,19 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
                   </select>
                 </div>
               ))}
+              {/* Rango de fechas */}
+              <div>
+                <label style={{ fontSize:'0.63rem', fontWeight:700, color:'#64748B', textTransform:'uppercase', display:'block', marginBottom:'3px' }}>Fecha desde</label>
+                <input type="date" value={filterFechaDesde} onChange={e=>setFilterFechaDesde(e.target.value)} min="2018-08-07"
+                  style={{ width:'100%', padding:'6px 8px', borderRadius:'6px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem', boxSizing:'border-box' }}/>
+              </div>
+              <div>
+                <label style={{ fontSize:'0.63rem', fontWeight:700, color:'#64748B', textTransform:'uppercase', display:'block', marginBottom:'3px' }}>Fecha hasta</label>
+                <input type="date" value={filterFechaHasta} onChange={e=>setFilterFechaHasta(e.target.value)} min="2018-08-07"
+                  style={{ width:'100%', padding:'6px 8px', borderRadius:'6px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem', boxSizing:'border-box' }}/>
+              </div>
             </div>
+
           ) : (
             // Contratos y Procesos: 5 filtros
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(185px,1fr))', gap:'8px' }}>
@@ -284,7 +305,20 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
                   style={{ width:'100%', padding:'6px 8px', borderRadius:'6px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem', boxSizing:'border-box' }}/>
               </div>
 
+              {/* Rango de fechas */}
+              <div>
+                <label style={{ fontSize:'0.63rem', fontWeight:700, color:'#64748B', textTransform:'uppercase', display:'block', marginBottom:'3px' }}>Fecha desde</label>
+                <input type="date" value={filterFechaDesde} onChange={e=>setFilterFechaDesde(e.target.value)} min="2018-08-07"
+                  style={{ width:'100%', padding:'6px 8px', borderRadius:'6px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem', boxSizing:'border-box' }}/>
+              </div>
+              <div>
+                <label style={{ fontSize:'0.63rem', fontWeight:700, color:'#64748B', textTransform:'uppercase', display:'block', marginBottom:'3px' }}>Fecha hasta</label>
+                <input type="date" value={filterFechaHasta} onChange={e=>setFilterFechaHasta(e.target.value)} min="2018-08-07"
+                  style={{ width:'100%', padding:'6px 8px', borderRadius:'6px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem', boxSizing:'border-box' }}/>
+              </div>
+
             </div>
+
           )}
         </div>
       )}
