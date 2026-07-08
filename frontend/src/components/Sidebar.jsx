@@ -35,7 +35,8 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword 
           </li>
         )}
 
-        <li>
+        {/* WikiDoc — oculto temporalmente, código intacto */}
+        <li style={{ display: 'none' }}>
           <div 
             className={`sidebar-link ${activeTab === 'wiki' ? 'active' : ''}`}
             onClick={() => setActiveTab('wiki')}
