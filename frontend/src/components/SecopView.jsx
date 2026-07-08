@@ -49,20 +49,32 @@ const FIELD_LABELS = {
 
 // ─── Panel único con toggle Contratante / Proveedor ─────────────────────────
 function ContratoPanel({ entidad, fuente, currentUser }) {
-  const [modo, setModo]                 = useState('contratante');
-  const [contratos, setContratos]       = useState([]);
-  const [estadisticas, setEstadisticas] = useState(null);
-  const [total, setTotal]               = useState(0);
-  const [loading, setLoading]           = useState(false);
-  const [error, setError]               = useState(null);
-  const [page, setPage]                 = useState(1);
-  const [detalleIdx, setDetalleIdx]     = useState(null);
-  const [localSearch, setLocalSearch]   = useState('');
-  const [search, setSearch]             = useState('');
-  const [filterTipo, setFilterTipo]     = useState('');
-  const [filterEstado, setFilterEstado] = useState('');
-  const [showFilters, setShowFilters]   = useState(false);
+  const [modo, setModo]                   = useState('contratante');
+  const [contratos, setContratos]         = useState([]);
+  const [estadisticas, setEstadisticas]   = useState(null);
+  const [total, setTotal]                 = useState(0);
+  const [loading, setLoading]             = useState(false);
+  const [error, setError]                 = useState(null);
+  const [page, setPage]                   = useState(1);
+  const [detalleIdx, setDetalleIdx]       = useState(null);
+  const [localSearch, setLocalSearch]     = useState('');
+  const [search, setSearch]               = useState('');
+  // Filtros genéricos
+  const [filterTipo, setFilterTipo]       = useState('');
+  const [filterModalidad, setFilterModalidad] = useState('');
+  const [filterEstado, setFilterEstado]   = useState('');
+  // Filtros específicos Contratos/Procesos
+  const [filterProveedor, setFilterProveedor]   = useState('');
+  const [filterDocProv, setFilterDocProv]       = useState('');
+  const [showFilters, setShowFilters]     = useState(false);
   const pageSize = 100;
+
+  // Reset filtros al cambiar fuente
+  const resetFilters = () => {
+    setFilterTipo(''); setFilterModalidad(''); setFilterEstado('');
+    setFilterProveedor(''); setFilterDocProv(''); setLocalSearch('');
+  };
+
 
   const fetchData = useCallback(async (pg = 1) => {
     if (!entidad || !currentUser) return;
@@ -71,9 +83,12 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
       const token  = await currentUser.getIdToken();
       const offset = (pg - 1) * pageSize;
       const params = new URLSearchParams({ modo, limit: String(pageSize), offset: String(offset) });
-      if (filterTipo)   params.append('tipo',   filterTipo);
-      if (filterEstado) params.append('estado', filterEstado);
-      if (search)       params.append('search', search);
+      if (search)           params.append('search',           search);
+      if (filterTipo)       params.append('tipo',             filterTipo);
+      if (filterModalidad)  params.append('modalidad',        filterModalidad);
+      if (filterEstado)     params.append('estado',           filterEstado);
+      if (filterProveedor)  params.append('proveedor_nombre', filterProveedor);
+      if (filterDocProv)    params.append('doc_proveedor',    filterDocProv);
 
       const resp = await fetch(`/api/secop/bq/${fuente.id}/${entidad.id}?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -100,11 +115,12 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
       setEstadisticas({ total: data.total||0, valorTotal: data.valor_total||0, enEjecucion: data.en_ejecucion||0, conAdicion: data.con_adicion||0 });
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
-  }, [entidad, currentUser, fuente.id, modo, filterTipo, filterEstado, search]);
+  }, [entidad, currentUser, fuente.id, modo, filterTipo, filterModalidad, filterEstado, filterProveedor, filterDocProv, search]);
 
   useEffect(() => { setPage(1); setContratos([]); setEstadisticas(null); setDetalleIdx(null); fetchData(1); },
-    [entidad, fuente.id, modo, filterTipo, filterEstado, search]);
+    [entidad, fuente.id, modo, filterTipo, filterModalidad, filterEstado, filterProveedor, filterDocProv, search]);
   useEffect(() => { const t = setTimeout(() => setSearch(localSearch), 600); return () => clearTimeout(t); }, [localSearch]);
+
 
   const totalPages = Math.ceil(total / pageSize);
   const esProveedor = modo === 'proveedor';
@@ -189,7 +205,7 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
         </div>
       )}
 
-      {/* Búsqueda */}
+      {/* Búsqueda + Filtros */}
       <div style={{ padding:'8px 14px', borderBottom:'1px solid #E8EDF3', display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', background:'#FAFBFC' }}>
         <div style={{ position:'relative', flex:1, minWidth:'160px' }}>
           <Search size={12} color="#94A3B8" style={{ position:'absolute', left:'9px', top:'50%', transform:'translateY(-50%)' }}/>
@@ -197,28 +213,79 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
             style={{ width:'100%', paddingLeft:'28px', padding:'6px 8px 6px 28px', border:'1.5px solid #E0E6ED', borderRadius:'6px', fontSize:'0.8rem', background:'#FFF', boxSizing:'border-box' }}/>
         </div>
         <button onClick={() => setShowFilters(f=>!f)} style={{ padding:'6px 10px', borderRadius:'6px', border:`1.5px solid ${showFilters?hColor:'#E0E6ED'}`, background:showFilters?`${hColor}15`:'#FFF', color:hColor, fontWeight:600, cursor:'pointer', fontSize:'0.75rem', display:'flex', alignItems:'center', gap:'4px' }}>
-          <Filter size={11}/> Filtros
+          <Filter size={11}/> Filtros {(filterTipo||filterModalidad||filterEstado||filterProveedor||filterDocProv) && <span style={{ background:hColor, color:'#FFF', borderRadius:'50%', width:'14px', height:'14px', fontSize:'0.6rem', display:'inline-flex', alignItems:'center', justifyContent:'center', marginLeft:'2px' }}>✓</span>}
         </button>
-        {(filterTipo||filterEstado||localSearch) && (
-          <button onClick={()=>{setFilterTipo('');setFilterEstado('');setLocalSearch('');}} style={{ padding:'6px 8px', borderRadius:'6px', border:'1px solid #E0E6ED', background:'#FFF', cursor:'pointer', color:'#C0392B', fontSize:'0.72rem', fontWeight:600, display:'flex', alignItems:'center', gap:'3px' }}>
-            <X size={10}/> Limpiar
+        {(filterTipo||filterModalidad||filterEstado||filterProveedor||filterDocProv||localSearch) && (
+          <button onClick={()=>{ resetFilters(); }} style={{ padding:'6px 8px', borderRadius:'6px', border:'1px solid #E0E6ED', background:'#FFF', cursor:'pointer', color:'#C0392B', fontSize:'0.72rem', fontWeight:600, display:'flex', alignItems:'center', gap:'3px' }}>
+            <X size={10}/> Limpiar todo
           </button>
         )}
       </div>
 
       {showFilters && (
-        <div style={{ padding:'8px 14px', borderBottom:'1px solid #E8EDF3', display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'7px', background:'#F8FAFC' }}>
-          {[{ label:'Tipo', v:filterTipo, set:setFilterTipo, opts:['Prestación de servicios','Suministros','Compraventa','Obra','Consultoría','Interadministrativo','Acuerdo Marco'] },
-            { label:'Estado', v:filterEstado, set:setFilterEstado, opts:['En ejecución','Cerrado','Aprobado','Liquidado','Terminado','Seleccionado','Issued'] }
-          ].map(f => (
-            <div key={f.label}>
-              <label style={{ fontSize:'0.65rem', fontWeight:700, color:'#64748B', textTransform:'uppercase', display:'block', marginBottom:'2px' }}>{f.label}</label>
-              <select value={f.v} onChange={e=>f.set(e.target.value)} style={{ width:'100%', padding:'6px 7px', borderRadius:'5px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem' }}>
-                <option value="">— Todos —</option>
-                {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+        <div style={{ padding:'10px 14px', borderBottom:'1px solid #E8EDF3', background:'#F8FAFC' }}>
+          {fuente.id === 'tienda_virtual' ? (
+            // Tienda Virtual: solo Tipo y Estado
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'7px' }}>
+              {[{ label:'Tipo / Agregación', v:filterTipo, set:setFilterTipo, opts:['Acuerdo Marco de Precio','Subasta Inversa','Mínima Cuantía'] },
+                { label:'Estado', v:filterEstado, set:setFilterEstado, opts:['Aprobada','Cancelada','En trámite','Recibida','Vigente'] }
+              ].map(f => (
+                <div key={f.label}>
+                  <label style={{ fontSize:'0.63rem', fontWeight:700, color:'#64748B', textTransform:'uppercase', display:'block', marginBottom:'3px' }}>{f.label}</label>
+                  <select value={f.v} onChange={e=>f.set(e.target.value)} style={{ width:'100%', padding:'6px 8px', borderRadius:'6px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem' }}>
+                    <option value="">— Todos —</option>
+                    {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              ))}
             </div>
-          ))}
+          ) : (
+            // Contratos y Procesos: 5 filtros
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(185px,1fr))', gap:'8px' }}>
+
+              {/* Tipo de Contrato */}
+              <div>
+                <label style={{ fontSize:'0.63rem', fontWeight:700, color:'#64748B', textTransform:'uppercase', display:'block', marginBottom:'3px' }}>Tipo de Contrato</label>
+                <select value={filterTipo} onChange={e=>setFilterTipo(e.target.value)} style={{ width:'100%', padding:'6px 8px', borderRadius:'6px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem' }}>
+                  <option value="">— Todos —</option>
+                  {['Prestación de servicios','Suministros','Compraventa','Obra','Consultoría','Interadministrativo','Acuerdo Marco','Arrendamiento','Concesión','Asociación','Apoyo a la gestión'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+
+              {/* Modalidad */}
+              <div>
+                <label style={{ fontSize:'0.63rem', fontWeight:700, color:'#64748B', textTransform:'uppercase', display:'block', marginBottom:'3px' }}>Modalidad</label>
+                <select value={filterModalidad} onChange={e=>setFilterModalidad(e.target.value)} style={{ width:'100%', padding:'6px 8px', borderRadius:'6px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem' }}>
+                  <option value="">— Todas —</option>
+                  {['Contratación directa','Mínima cuantía','Licitación pública','Selección abreviada','Concurso de méritos','Asociación público privada','Régimen especial','Contratación de mínima cuantía'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+
+              {/* Estado */}
+              <div>
+                <label style={{ fontSize:'0.63rem', fontWeight:700, color:'#64748B', textTransform:'uppercase', display:'block', marginBottom:'3px' }}>Estado</label>
+                <select value={filterEstado} onChange={e=>setFilterEstado(e.target.value)} style={{ width:'100%', padding:'6px 8px', borderRadius:'6px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem' }}>
+                  <option value="">— Todos —</option>
+                  {['En ejecución','Cerrado','Aprobado','Liquidado','Terminado','Seleccionado','Issued','Presentation of offer','Cancelled','Suspendido'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+
+              {/* Proveedor / Contratista — texto libre */}
+              <div>
+                <label style={{ fontSize:'0.63rem', fontWeight:700, color:'#64748B', textTransform:'uppercase', display:'block', marginBottom:'3px' }}>Proveedor / Contratista</label>
+                <input type="text" placeholder="Nombre del proveedor..." value={filterProveedor} onChange={e=>setFilterProveedor(e.target.value)}
+                  style={{ width:'100%', padding:'6px 8px', borderRadius:'6px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem', boxSizing:'border-box' }}/>
+              </div>
+
+              {/* Doc. Proveedor — texto libre */}
+              <div>
+                <label style={{ fontSize:'0.63rem', fontWeight:700, color:'#64748B', textTransform:'uppercase', display:'block', marginBottom:'3px' }}>Doc. Proveedor (NIT/Cédula)</label>
+                <input type="text" placeholder="NIT o cédula..." value={filterDocProv} onChange={e=>setFilterDocProv(e.target.value)}
+                  style={{ width:'100%', padding:'6px 8px', borderRadius:'6px', border:'1.5px solid #E0E6ED', background:'#FFF', fontSize:'0.8rem', boxSizing:'border-box' }}/>
+              </div>
+
+            </div>
+          )}
         </div>
       )}
 

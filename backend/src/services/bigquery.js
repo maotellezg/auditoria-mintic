@@ -351,25 +351,32 @@ const BQ_TABLE_CONFIG = {
     table: 'secop_ii_contratos',
     dateField: 'fecha_de_firma',
     valueField: 'valor_del_contrato',
-    searchFields: ['objeto_del_contrato', 'nombre_entidad', 'proveedor_adjudicado'],
-    tipoField: 'tipo_de_contrato',
-    estadoField: 'estado_contrato',
+    searchFields: ['objeto_del_contrato', 'nombre_entidad', 'proveedor_adjudicado', 'referencia_del_contrato'],
+    tipoField:       'tipo_de_contrato',
+    modalidadField:  'modalidad_de_contratacion',
+    estadoField:     'estado_contrato',
+    proveedorField:  'proveedor_adjudicado',
+    docProvField:    'documento_proveedor',
   },
   secop_ii_procesos: {
     table: 'secop_ii_procesos',
     dateField: 'fecha_de_publicacion',
     valueField: 'precio_base',
-    searchFields: ['descripcion_del_procedimiento', 'entidad', 'nombre_del_proveedor'],
-    tipoField: 'tipo_de_contrato',
-    estadoField: 'estado_del_procedimiento',
+    searchFields: ['descripcion_del_procedimiento', 'entidad', 'nombre_del_proveedor', 'referencia_del_proceso'],
+    tipoField:       'tipo_de_contrato',
+    modalidadField:  'modalidad_de_contratacion',
+    estadoField:     'estado_del_procedimiento',
+    proveedorField:  'nombre_del_proveedor',
+    docProvField:    'nit_del_proveedor_adjudicado',
   },
   tienda_virtual: {
     table: 'tienda_virtual',
     dateField: 'fecha',
     valueField: 'total',
     searchFields: ['items', 'entidad', 'proveedor'],
-    tipoField: 'agregacion',
-    estadoField: 'estado',
+    tipoField:    'agregacion',
+    estadoField:  'estado',
+    // Sin filtros extra en Tienda Virtual
   },
 };
 
@@ -384,8 +391,15 @@ export async function querySecopBQ(tabla, entidadId, modo, opts = {}) {
   const cfg = BQ_TABLE_CONFIG[tabla];
   if (!cfg) throw new Error(`Tabla desconocida: ${tabla}`);
 
-  const { limit = 50, offset = 0, search = '', tipo = '', estado = '', fechaDesde = '', fechaHasta = '' } = opts;
+  const {
+    limit = 50, offset = 0, search = '',
+    tipo = '', modalidad = '', estado = '',
+    proveedor_nombre = '', doc_proveedor = '',
+    fechaDesde = '', fechaHasta = '',
+  } = opts;
   const fullTable = `\`${PROJECT_ID}.${DATASET_ID}.${cfg.table}\``;
+
+  const esc = (s) => s.replace(/'/g, "''").replace(/%/g, '\\%');
 
   const conditions = [
     `'${entidadId}' IN UNNEST(entidades_mintic)`,
@@ -393,16 +407,22 @@ export async function querySecopBQ(tabla, entidadId, modo, opts = {}) {
   ];
 
   if (search) {
-    const q = search.replace(/'/g, "''").replace(/%/g, '\\%');
+    const q = esc(search);
     const searchCond = cfg.searchFields
       .map(f => `UPPER(IFNULL(${f},'')) LIKE UPPER('%${q}%')`)
       .join(' OR ');
     conditions.push(`(${searchCond})`);
   }
-  if (tipo)       conditions.push(`UPPER(IFNULL(${cfg.tipoField},'')) = UPPER('${tipo.replace(/'/g, "''")}')`);
-  if (estado)     conditions.push(`UPPER(IFNULL(${cfg.estadoField},'')) = UPPER('${estado.replace(/'/g, "''")}')`);
-  if (fechaDesde) conditions.push(`${cfg.dateField} >= '${fechaDesde}'`);
-  if (fechaHasta) conditions.push(`${cfg.dateField} <= '${fechaHasta}'`);
+  if (tipo)             conditions.push(`UPPER(IFNULL(${cfg.tipoField},''))      = UPPER('${esc(tipo)}')`);
+  if (modalidad && cfg.modalidadField)
+                        conditions.push(`UPPER(IFNULL(${cfg.modalidadField},'')) = UPPER('${esc(modalidad)}')`);
+  if (estado)           conditions.push(`UPPER(IFNULL(${cfg.estadoField},''))    = UPPER('${esc(estado)}')`);
+  if (proveedor_nombre && cfg.proveedorField)
+                        conditions.push(`UPPER(IFNULL(${cfg.proveedorField},'')) LIKE UPPER('%${esc(proveedor_nombre)}%')`);
+  if (doc_proveedor && cfg.docProvField)
+                        conditions.push(`UPPER(IFNULL(${cfg.docProvField},''))   LIKE UPPER('%${esc(doc_proveedor)}%')`);
+  if (fechaDesde)       conditions.push(`${cfg.dateField} >= '${fechaDesde}'`);
+  if (fechaHasta)       conditions.push(`${cfg.dateField} <= '${fechaHasta}'`);
 
   const where = conditions.join(' AND ');
 

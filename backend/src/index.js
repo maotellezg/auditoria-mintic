@@ -2275,13 +2275,16 @@ app.get('/api/secop/bq/:tabla/:entidadId', checkUser, async (req, res) => {
 
   try {
     const result = await querySecopBQ(tabla, entidadId, modo, {
-      limit:      req.query.limit      || 50,
-      offset:     req.query.offset     || 0,
-      search:     req.query.search     || '',
-      tipo:       req.query.tipo       || '',
-      estado:     req.query.estado     || '',
-      fechaDesde: req.query.fechaDesde || '',
-      fechaHasta: req.query.fechaHasta || '',
+      limit:            req.query.limit            || 50,
+      offset:           req.query.offset           || 0,
+      search:           req.query.search           || '',
+      tipo:             req.query.tipo             || '',
+      modalidad:        req.query.modalidad        || '',
+      estado:           req.query.estado           || '',
+      proveedor_nombre: req.query.proveedor_nombre || '',
+      doc_proveedor:    req.query.doc_proveedor    || '',
+      fechaDesde:       req.query.fechaDesde       || '',
+      fechaHasta:       req.query.fechaHasta       || '',
     });
     return res.json(result);
   } catch (err) {
