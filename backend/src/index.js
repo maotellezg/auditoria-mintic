@@ -1591,130 +1591,211 @@ app.get('/api/chat/filters', checkUser, async (req, res) => {
 
 /**
  * POST /api/chat
- * Chatbot inteligente (RAG) con historial de conversación (memoria) y citación estructurada.
+ * Asistente forense de auditoría MinTic — RAG con capa semántica completa, análisis de corrupción
+ * y conocimiento general del sector TIC colombiano.
  */
 app.post('/api/chat', checkUser, async (req, res) => {
   const { message, history } = req.body;
-  const userId = req.user.uid;
+  const userId  = req.user.uid;
   const userEmail = req.user.email;
 
   if (!message || typeof message !== 'string') {
-    return res.status(400).json({ error: 'La pregunta o mensaje del chat es obligatoria.' });
+    return res.status(400).json({ error: 'La pregunta es obligatoria.' });
   }
 
-  console.log(`[RAG Chat] Nueva pregunta de ${userEmail}: "${message}"`);
-
+  console.log(`[AUDIT-CHAT] Consulta de ${userEmail}: "${message.slice(0, 120)}"`);
   const startTime = Date.now();
 
   try {
-    // 1. Generar embedding de la consulta del usuario
+    // ── 1. Embedding de la consulta ──────────────────────────────────────────
     const queryVector = await getEmbedding(message);
 
-    // 2. Realizar búsqueda vectorial directa en Firestore (con el índice READY)
+    // ── 2. Búsqueda vectorial ampliada (25 fragmentos para mayor cobertura) ──
     const vectorQuery = db.collection('document_chunks').findNearest({
       vectorField: 'embedding',
       queryVector: FieldValue.vector(queryVector),
-      limit: 15,
+      limit: 25,
       distanceMeasure: 'COSINE',
       distanceResultField: 'distance'
     });
     const querySnapshot = await vectorQuery.get();
 
-    // 3. Extraer texto y estructurar chunks
     const chunks = [];
-    querySnapshot.forEach(doc => {
-      chunks.push({ id: doc.id, ...doc.data() });
-    });
+    querySnapshot.forEach(doc => chunks.push({ id: doc.id, ...doc.data() }));
+    console.log(`[AUDIT-CHAT] ${chunks.length} fragmentos vectoriales encontrados.`);
 
-    console.log(`[RAG Chat] Encontrados ${chunks.length} fragmentos de contexto para responder.`);
+    // ── 3. Enriquecer con metadatos semánticos de Firestore ─────────────────
+    // Obtener los docIds únicos de los chunks más relevantes
+    const uniqueDocIds = [...new Set(chunks.map(c => c.docId).filter(Boolean))].slice(0, 10);
+    let metadataContext = '';
 
-    if (chunks.length === 0) {
-      return res.json({
-        response: 'No se encontraron documentos o fragmentos relevantes para responder a tu pregunta en el corpus indexado.',
-        citations: [],
-        iaMetadata: {
-          modelUsed: 'gemini-2.5-flash',
-          durationMs: Date.now() - startTime,
-          tokens: null
-        }
-      });
+    if (uniqueDocIds.length > 0) {
+      try {
+        const metaDocs = await Promise.all(
+          uniqueDocIds.map(id => db.collection('documents').doc(id).get())
+        );
+        const metaEntries = metaDocs
+          .filter(d => d.exists)
+          .map(d => {
+            const m = d.data();
+            const personas = (m.personas || [])
+              .map(p => `${p.nombre || ''}${p.cedula && p.cedula !== 'No especificado' ? ` (CC/NIT: ${p.cedula})` : ''} — ${p.cargo || ''} — ${p.rol || ''}`)
+              .filter(Boolean).join('; ');
+            const alertas = (m.alertas || []).join('; ');
+            return [
+              `[META Doc:${d.id}|${m.fileName || ''}]`,
+              `  Entidad: ${m.entidad || m.institution || 'N/A'}`,
+              `  Tipo: ${m.tipoDocumento || m.documentType || 'N/A'}`,
+              `  No. Documento: ${m.numeroDocumento || m.expediente || 'N/A'}`,
+              `  Fecha: ${m.fechaDocumento || m.date || 'N/A'}`,
+              `  Valor: ${m.valorContrato || 'N/A'}`,
+              `  Objeto: ${m.objetoContrato || 'N/A'}`,
+              `  Contratista: ${m.contratista || m.company || 'N/A'}`,
+              `  Supervisor: ${m.supervisor || 'N/A'}`,
+              personas ? `  Personas identificadas: ${personas}` : '',
+              alertas ? `  ⚠️ Alertas: ${alertas}` : '',
+              `  Resumen: ${(m.resumen || m.summary || '').slice(0, 400)}`
+            ].filter(Boolean).join('\n');
+          });
+        metadataContext = metaEntries.join('\n\n');
+        console.log(`[AUDIT-CHAT] Metadatos enriquecidos para ${metaEntries.length} documentos únicos.`);
+      } catch (metaErr) {
+        console.warn('[AUDIT-CHAT] No se pudo enriquecer metadatos:', metaErr.message);
+      }
     }
 
-    // 4. Formatear contexto para Gemini
-    const contextText = chunks.map((chunk, idx) => {
-      return `[Fragmento ${idx + 1}] (Documento ID: ${chunk.docId}, Nombre del archivo: "${chunk.fileName}"):\n${chunk.text}`;
-    }).join('\n\n');
+    // ── 4. Formatear fragmentos textuales ────────────────────────────────────
+    const contextText = chunks.map((chunk, idx) =>
+      `[Frag ${idx + 1}] Doc:${chunk.docId}|"${chunk.fileName}" (similitud coseno: ${chunk.distance ? (1 - chunk.distance).toFixed(3) : 'N/A'}):\n${chunk.text}`
+    ).join('\n\n');
 
-    // 5. Formatear el historial de chat para darle memoria al modelo
+    // ── 5. Historial de conversación (memoria) ───────────────────────────────
     let historyText = '';
     if (Array.isArray(history) && history.length > 0) {
-      // Filtrar últimos 10 mensajes del historial para no saturar contexto
-      const relevantHistory = history.slice(-10);
-      historyText = relevantHistory.map(h => {
-        const roleLabel = h.role === 'user' ? 'Usuario' : 'Asistente (MinTic-Chat)';
-        return `${roleLabel}: ${h.content}`;
+      historyText = history.slice(-12).map(h => {
+        const label = h.role === 'user' ? '👤 Usuario' : '🤖 Asistente';
+        return `${label}: ${h.content}`;
       }).join('\n');
     }
 
-    // 6. Enviar a Gemini para generar respuesta con memoria
+    // ── 6. System Prompt — Auditor Forense de Corrupción ────────────────────
     const systemPrompt = `
-Eres "MinTic-Chat", un chatbot inteligente experto de la MinTic (Ministerio de Tecnologias de la Informacion y las Comunicaciones).
-Tu tarea es responder la PREGUNTA ACTUAL del usuario de manera profesional, clara y estructurada en español formal.
+Eres "AuditBot MinTic", un asistente forense especializado en auditoría gubernamental, 
+detección de corrupción y análisis de documentos del sector TIC colombiano 
+(MinTIC, ANE, CRC, AND, FUTIC, RTVC, Servicios Postales Nacionales 4-72).
 
-Instrucciones Críticas:
-1. CITAS OBLIGATORIAS: Cada vez que afirmes algo basado en el contexto de documentos indexados provisto, debes citar inmediatamente al final de la oración usando la nomenclatura exacta \`[Doc:docId|fileName]\` de donde proviene. Por ejemplo: "La ANLA impuso una sanción a Ecopetrol por vertimientos en el Río Sogamoso [Doc:abc123DocId|resolucion_sancion.pdf]".
-2. Nunca inventes los IDs de documento ni nombres de archivo. Usa exactamente el 'Documento ID' y 'Nombre del archivo' provistos en el contexto de fragmentos.
-3. Memoria/Historial: Tienes a tu disposición el historial previo de la conversación. Utilízalo únicamente para comprender referencias relativas (ej. "él", "ella", "esta empresa", "anterior") pero dale prioridad estricta a responder la PREGUNTA ACTUAL usando el contexto adjunto.
-4. Si la información necesaria para responder no se encuentra en el contexto provisto, indícalo de manera amable diciendo que no cuentas con la información específica en los expedientes indexados. No respondas con conocimientos externos.
-5. Haz uso de formato markdown básico (listas, negritas) para estructurar tu respuesta de forma atractiva.
+════════════════════════════════════════════════════
+TUS CAPACIDADES Y ROLES
+════════════════════════════════════════════════════
+1. 🔍 AUDITOR FORENSE: Detectas patrones de corrupción, irregularidades contractuales,
+   inconsistencias en declaraciones de renta, conflictos de interés, y alertas de riesgo.
+
+2. 📊 ANALISTA SEMÁNTICO: Cruzas información entre múltiples documentos para identificar
+   personas, empresas y contratos relacionados. Identificas redes de relaciones.
+
+3. ⚖️ EXPERTO JURÍDICO TIC: Conoces el marco normativo colombiano: Ley 1341/2009,
+   Estatuto de Contratación (Ley 80/93, Ley 1150/07), SECOP, DIAN, y regulaciones MinTic.
+
+4. 💼 ANALISTA FINANCIERO: Evalúas valores de contratos, adiciones injustificadas,
+   estructuración de contratos para evadir licitación, y señales de lavado de activos.
+
+5. 🌐 ASISTENTE GENERAL: Puedes responder cualquier pregunta general del sector TIC,
+   normativa colombiana, o temas de interés para el auditor aunque no estén en los documentos.
+
+════════════════════════════════════════════════════
+INSTRUCCIONES CRÍTICAS
+════════════════════════════════════════════════════
+CITAS: Cuando uses información de documentos indexados, cita SIEMPRE con el formato exacto
+[Doc:docId|nombreArchivo] al final de cada afirmación. Ej: "El contrato fue adjudicado sin
+licitación [Doc:xyz123|contrato_001.pdf]"
+
+ANÁLISIS FORENSE: Si la pregunta implica buscar irregularidades, SIEMPRE analiza:
+- Personas repetidas en múltiples contratos (posibles testaferros o conflictos de interés)
+- Valores que superen umbrales (>500 SMMLV = licitación obligatoria en 2024 ≈ $700M COP)
+- Contratos divididos artificialmente para evadir licitación (fraccionamiento)
+- Diferencias entre declaraciones de renta y valores de contratos recibidos
+- Supervisores/interventores que también son contratistas en otras entidades
+- Fechas de constitución de empresas vs. fechas de primer contrato (empresas de maletín)
+- Domicilios sospechosos (misma dirección para múltiples empresas)
+
+RESPUESTA SIN RESTRICCIONES EN DOCS: Si la información no está en los documentos,
+responde con tu conocimiento general del sector TIC colombiano, normativa vigente, o
+análisis de contexto. Nunca digas "no puedo responder" — siempre aporta valor.
+
+FORMATO: Usa markdown rico:
+- 🔴 para alertas críticas de corrupción
+- 🟡 para señales de alerta moderada  
+- 🟢 para hallazgos normales/positivos
+- 📋 para resúmenes de documentos
+- 👤 para menciones de personas
+- 💰 para datos financieros
+- ⚖️ para análisis normativo
 `;
 
+    // ── 7. Construir prompt completo ─────────────────────────────────────────
+    const promptText = `
+${historyText ? `HISTORIAL DE CONVERSACIÓN (MEMORIA — últimos mensajes):\n${historyText}\n\n` : ''}
+══════════════════════════════════════════════════════
+CONSULTA DEL AUDITOR:
+"${message}"
+══════════════════════════════════════════════════════
+
+CAPA SEMÁNTICA — METADATOS ESTRUCTURADOS (documentos más relevantes):
+${metadataContext || 'No hay metadatos adicionales disponibles.'}
+
+══════════════════════════════════════════════════════
+CAPA DE CONTENIDO — FRAGMENTOS TEXTUALES (extraídos por similitud semántica):
+${contextText || 'No se encontraron fragmentos de contenido relevantes.'}
+══════════════════════════════════════════════════════
+
+Instrucciones finales:
+- Responde la consulta del auditor de forma exhaustiva y estructurada.
+- Si detectas señales de corrupción o irregularidades, resáltalas claramente con 🔴.
+- Cita con [Doc:id|archivo] cada afirmación basada en documentos.
+- Si no hay suficiente contexto documental, aporta desde tu conocimiento del sector TIC colombiano.
+- Termina siempre con una sección "💡 Recomendaciones para el auditor" con los próximos pasos sugeridos.
+`;
+
+    // ── 8. Llamar a Gemini 2.5 Flash ─────────────────────────────────────────
     const modelInstance = vertexAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
-      systemInstruction: systemPrompt
+      systemInstruction: systemPrompt,
+      generationConfig: {
+        maxOutputTokens: 8192,
+        temperature: 0.2,   // Baja temperatura para análisis forense preciso
+        topP: 0.8
+      }
     });
-
-    const promptText = `
-${historyText ? `HISTORIAL DE LA CONVERSACIÓN (MEMORIA):\n${historyText}\n\n` : ''}
-PREGUNTA ACTUAL DEL USUARIO:
-"${message}"
-
-CONTEXTO DE DOCUMENTOS INDEXADOS (Usa únicamente esta información para responder a la PREGUNTA ACTUAL):
-${contextText}
-
-Genera tu respuesta estructurada y citada según las instrucciones.
-`;
 
     const result = await modelInstance.generateContent({
       contents: [{ role: 'user', parts: [{ text: promptText }] }]
     });
 
-    const response = await result.response;
-    const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text || response.text || '';
+    const response    = await result.response;
+    const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text
+                      || response.text || '';
 
     const durationMs = Date.now() - startTime;
-    const tokens = response.usageMetadata || null;
+    const tokens     = response.usageMetadata || null;
 
-    // 7. Extraer las citas únicas presentes en el texto
+    // ── 9. Extraer citas únicas ───────────────────────────────────────────────
     const citationsRegex = /\[Doc:([^|\]]+)\|([^\]]+)\]/g;
-    const citationsMap = new Map();
+    const citationsMap   = new Map();
     let match;
     while ((match = citationsRegex.exec(responseText)) !== null) {
       citationsMap.set(match[1], match[2]);
     }
+    const uniqueCitations = Array.from(citationsMap.entries()).map(([id, fileName]) => ({ id, fileName }));
 
-    const uniqueCitations = Array.from(citationsMap.entries()).map(([id, fileName]) => ({
-      id,
-      fileName
-    }));
-
-    // 8. Guardar en auditoría
-    await logAuditEvent(userId, userEmail, 'IA_CHAT', {
+    // ── 10. Registrar en auditoría ────────────────────────────────────────────
+    await logAuditEvent(userId, userEmail, 'IA_CHAT_FORENSIC', {
       query: message,
-      durationMs: durationMs,
-      tokensUsed: tokens ? tokens.totalTokenCount : null,
+      durationMs,
+      tokensUsed: tokens?.totalTokenCount || null,
       modelUsed: 'gemini-2.5-flash',
-      citationsCount: uniqueCitations.length
+      citationsCount: uniqueCitations.length,
+      docsEnriched: uniqueDocIds.length,
+      chunksUsed: chunks.length
     });
 
     return res.json({
@@ -1722,15 +1803,17 @@ Genera tu respuesta estructurada y citada según las instrucciones.
       citations: uniqueCitations,
       iaMetadata: {
         modelUsed: 'gemini-2.5-flash',
-        durationMs: durationMs,
-        tokens: tokens || null
+        durationMs,
+        tokens: tokens || null,
+        chunksUsed: chunks.length,
+        docsEnriched: uniqueDocIds.length
       }
     });
 
   } catch (error) {
-    console.error('[RAG Chat] Error en /api/chat:', error);
+    console.error('[AUDIT-CHAT] Error:', error);
     return res.status(500).json({
-      error: 'Error al procesar la consulta del chat.',
+      error: 'Error al procesar la consulta del chat forense.',
       details: error.message
     });
   }
