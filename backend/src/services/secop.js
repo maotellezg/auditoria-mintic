@@ -7,7 +7,7 @@
  *
  * Entidades MinTic (NITs sin puntos ni guión):
  *   MinTIC  899999053  |  ANE  900334265  |  CRC  830002593
- *   AND     901144049  |  FUTIC 800131648 |  RTVC 900002583  |  4-72  900062917
+ *   AND     901144049  |  FUTIC 8001316486 |  RTVC 900002583  |  4-72  900062917
  */
 
 const FECHA_MINIMA = '2018-08-07T00:00:00.000';
@@ -127,7 +127,7 @@ export const ENTIDADES_MINTIC = [
     icono: '💻'
   },
   {
-    id: 'futic', nombre: 'FUTIC', nit: '800131648', color: '#C0392B',
+    id: 'futic', nombre: 'FUTIC', nit: '8001316486', color: '#C0392B',
     nombreCompleto: 'Fondo Único de Tecnologías de la Información y las Comunicaciones',
     nombreCorto: 'FONDO UNICO DE TECNOLOGIAS',
     icono: '💰'
