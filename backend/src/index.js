@@ -13,7 +13,8 @@ import { VertexAI } from '@google-cloud/vertexai';
 import nodemailer from 'nodemailer';
 import { fetchContratante, countContratante, fetchProveedor, countProveedor, normalizarContrato, ENTIDADES_MINTIC, SECOP_SOURCES } from './services/secop.js';
 import { sincronizarTodo } from './services/secopSync.js';
-import { initBigQuery, queryBQ, DATASET_ID } from './services/bigquery.js';
+import { initBigQuery, queryBQ, querySecopBQ, resumenEntidadBQ, DATASET_ID } from './services/bigquery.js';
+
 
 // Inicializar BigQuery al arrancar (crea dataset y tablas si no existen)
 initBigQuery().catch(err => console.warn('[BQ] Error al inicializar:', err.message));
@@ -2250,7 +2251,61 @@ app.get('/api/secop/bigquery/stats', checkUser, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  SECOP — Consulta desde BigQuery (rápido, sin límites de paginación)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/secop/bq/:tabla/:entidadId
+ * Consulta datos SECOP desde BigQuery.
+ * ?modo=contratante|proveedor  (default: contratante)
+ * ?limit=50  ?offset=0
+ * ?search=texto
+ * ?tipo=Prestacion+de+servicios
+ * ?estado=Liquidado
+ * ?fechaDesde=2022-01-01  ?fechaHasta=2024-12-31
+ */
+app.get('/api/secop/bq/:tabla/:entidadId', checkUser, async (req, res) => {
+  const { tabla, entidadId } = req.params;
+  const tablas = ['secop_ii_contratos', 'secop_ii_procesos', 'tienda_virtual'];
+  if (!tablas.includes(tabla)) return res.status(400).json({ error: `Tabla inválida: ${tabla}` });
+
+  const modo = req.query.modo || 'contratante';
+  if (!['contratante', 'proveedor'].includes(modo)) return res.status(400).json({ error: 'modo debe ser contratante o proveedor' });
+
+  try {
+    const result = await querySecopBQ(tabla, entidadId, modo, {
+      limit:      req.query.limit      || 50,
+      offset:     req.query.offset     || 0,
+      search:     req.query.search     || '',
+      tipo:       req.query.tipo       || '',
+      estado:     req.query.estado     || '',
+      fechaDesde: req.query.fechaDesde || '',
+      fechaHasta: req.query.fechaHasta || '',
+    });
+    return res.json(result);
+  } catch (err) {
+    console.error(`[BQ query] ${tabla}/${entidadId}/${modo}: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/secop/bq/resumen/:entidadId
+ * Resumen consolidado de las 3 tablas para una entidad (conteos + valores).
+ */
+app.get('/api/secop/bq/resumen/:entidadId', checkUser, async (req, res) => {
+  try {
+    const resumen = await resumenEntidadBQ(req.params.entidadId);
+    return res.json(resumen);
+  } catch (err) {
+    console.error(`[BQ resumen] ${req.params.entidadId}: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Cualquier otra ruta no-API debe retornar el index.html del frontend
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(publicPath, 'index.html'));
 });

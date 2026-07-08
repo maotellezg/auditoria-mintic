@@ -8,7 +8,7 @@ const ENTIDADES = [
   { id: 'ane',    nombre: 'ANE',     color: '#214E92', bg: '#EBF1FB', icono: '📡', nit: '900334265', desc: 'Agencia Nacional del Espectro' },
   { id: 'crc',    nombre: 'CRC',     color: '#0D7C3D', bg: '#E8F7EE', icono: '⚖️', nit: '830002593', desc: 'Comisión de Regulación de Comunicaciones' },
   { id: 'and',    nombre: 'AND',     color: '#7B2D8B', bg: '#F5EBF8', icono: '💻', nit: '901144049', desc: 'Agencia Nacional Digital' },
-  { id: 'futic',  nombre: 'FUTIC',   color: '#C0392B', bg: '#FDECEA', icono: '💰', nit: '800131648', desc: 'Fondo Único TIC' },
+  { id: 'futic',  nombre: 'FUTIC',   color: '#C0392B', bg: '#FDECEA', icono: '💰', nit: '8001316486', desc: 'Fondo Único TIC' },
   { id: 'rtvc',   nombre: 'RTVC',    color: '#E67E22', bg: '#FEF5EC', icono: '📺', nit: '900002583', desc: 'Sistema de Medios Públicos' },
   { id: '472',    nombre: '4-72',    color: '#16A085', bg: '#E8F8F5', icono: '📮', nit: '900062917', desc: 'Servicios Postales Nacionales' },
 ];
@@ -45,27 +45,52 @@ function ContratoPanel({ entidad, fuente, modo, currentUser }) {
   const [showFilters, setShowFilters]   = useState(false);
   const pageSize = 100;
 
+  // Llama a BigQuery via /api/secop/bq/:tabla/:entidadId
   const fetchData = useCallback(async (pg = 1) => {
     if (!entidad || !currentUser) return;
     setLoading(true); setError(null);
     try {
-      const token = await currentUser.getIdToken();
-      const params = new URLSearchParams({ page: String(pg), pageSize: String(pageSize), fuente: fuente.id });
-      if (filterTipo)   params.append('tipoContrato', filterTipo);
+      const token  = await currentUser.getIdToken();
+      const offset = (pg - 1) * pageSize;
+      const params = new URLSearchParams({
+        modo,
+        limit:  String(pageSize),
+        offset: String(offset),
+      });
+      if (filterTipo)   params.append('tipo',   filterTipo);
       if (filterEstado) params.append('estado', filterEstado);
       if (search)       params.append('search', search);
 
-      const endpoint = modo === 'proveedor'
-        ? `/api/secop/como-proveedor/${entidad.id}?${params}`
-        : `/api/secop/contratos/${entidad.id}?${params}`;
-
-      const resp = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } });
+      const resp = await fetch(`/api/secop/bq/${fuente.id}/${entidad.id}?${params}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (!resp.ok) throw new Error(`Error ${resp.status}: ${await resp.text()}`);
       const data = await resp.json();
-      setContratos(data.contratos || []);
+
+      // Normalizar campos BQ al formato que espera la UI
+      const normalizados = (data.data || []).map(r => ({
+        ...r,
+        // contratos
+        objeto:   r.objeto_del_contrato || r.descripcion_del_procedimiento || r.items || '—',
+        contratista: r.proveedor_adjudicado || r.nombre_del_proveedor || r.proveedor || '—',
+        nit_contratista: r.documento_proveedor || r.nit_del_proveedor_adjudicado || r.nit_proveedor || '—',
+        tipo:     r.tipo_de_contrato || r.agregacion || '—',
+        estado:   r.estado_contrato || r.estado_del_procedimiento || r.estado || '—',
+        fecha:    r.fecha_de_firma || r.fecha_de_publicacion || r.fecha || null,
+        valor:    parseFloat(r.valor_del_contrato || r.precio_base || r.total || 0),
+        entidad_nombre: r.nombre_entidad || r.entidad || '—',
+        url:      r.url_secop || null,
+        fuente_tag: 'BigQuery 🗄️',
+      }));
+
+      setContratos(normalizados);
       setTotal(data.total || 0);
-      if (data.estadisticas) setEstadisticas(data.estadisticas);
-      else if (pg === 1) setEstadisticas(null);
+      setEstadisticas({
+        total:        data.total || 0,
+        valorTotal:   data.valor_total || 0,
+        enEjecucion:  data.en_ejecucion || 0,
+        conAdicion:   data.con_adicion || 0,
+      });
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }, [entidad, currentUser, fuente.id, modo, filterTipo, filterEstado, search]);
@@ -363,9 +388,9 @@ export default function SecopView() {
   useEffect(() => {
     if (!entidadActiva || !currentUser) return;
     currentUser.getIdToken().then(token => {
-      fetch(`/api/secop/resumen/${entidadActiva.id}`, { headers: { Authorization: `Bearer ${token}` } })
+      fetch(`/api/secop/bq/resumen/${entidadActiva.id}`, { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.ok ? r.json() : null)
-        .then(data => { if (data) setResumen(data.resumen); })
+        .then(data => { if (data) setResumen(data); })
         .catch(() => {});
     });
   }, [entidadActiva, currentUser]);
@@ -379,9 +404,10 @@ export default function SecopView() {
           📋 Contratación Pública MinTic — SECOP
         </h2>
         <p style={{ color:'var(--text-secondary)', fontSize:'0.82rem', margin:'4px 0 0' }}>
-          3 fuentes de datos · desde <strong>2018-08-07</strong> · Contratante + Proveedor simultáneamente
+          3 fuentes de datos · desde <strong>2018-08-07</strong> · Contratante + Proveedor simultáneamente · <span style={{ background:'#EBF1FB', color:'#214E92', borderRadius:'5px', padding:'1px 7px', fontWeight:700, fontSize:'0.75rem' }}>🗄️ Datos desde BigQuery</span>
         </p>
       </div>
+
 
       {/* Entidades */}
       <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>

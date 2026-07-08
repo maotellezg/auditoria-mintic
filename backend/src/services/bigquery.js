@@ -345,4 +345,135 @@ export async function queryBQ(sql) {
   return rows;
 }
 
+// ─── Configuración de tablas para consulta ───────────────────────────────────
+const BQ_TABLE_CONFIG = {
+  secop_ii_contratos: {
+    table: 'secop_ii_contratos',
+    dateField: 'fecha_de_firma',
+    valueField: 'valor_del_contrato',
+    searchFields: ['objeto_del_contrato', 'nombre_entidad', 'proveedor_adjudicado'],
+    tipoField: 'tipo_de_contrato',
+    estadoField: 'estado_contrato',
+  },
+  secop_ii_procesos: {
+    table: 'secop_ii_procesos',
+    dateField: 'fecha_de_publicacion',
+    valueField: 'precio_base',
+    searchFields: ['descripcion_del_procedimiento', 'entidad', 'nombre_del_proveedor'],
+    tipoField: 'tipo_de_contrato',
+    estadoField: 'estado_del_procedimiento',
+  },
+  tienda_virtual: {
+    table: 'tienda_virtual',
+    dateField: 'fecha',
+    valueField: 'total',
+    searchFields: ['items', 'entidad', 'proveedor'],
+    tipoField: 'agregacion',
+    estadoField: 'estado',
+  },
+};
+
+/**
+ * Consulta datos SECOP desde BigQuery con filtros, paginación y búsqueda.
+ * @param {string} tabla      - 'secop_ii_contratos' | 'secop_ii_procesos' | 'tienda_virtual'
+ * @param {string} entidadId  - ID de la entidad ('mintic', 'ane', etc.)
+ * @param {string} modo       - 'contratante' | 'proveedor'
+ * @param {object} opts       - { limit, offset, search, tipo, estado, fechaDesde, fechaHasta }
+ */
+export async function querySecopBQ(tabla, entidadId, modo, opts = {}) {
+  const cfg = BQ_TABLE_CONFIG[tabla];
+  if (!cfg) throw new Error(`Tabla desconocida: ${tabla}`);
+
+  const { limit = 50, offset = 0, search = '', tipo = '', estado = '', fechaDesde = '', fechaHasta = '' } = opts;
+  const fullTable = `\`${PROJECT_ID}.${DATASET_ID}.${cfg.table}\``;
+
+  const conditions = [
+    `'${entidadId}' IN UNNEST(entidades_mintic)`,
+    `'${modo}' IN UNNEST(roles_mintic)`,
+  ];
+
+  if (search) {
+    const q = search.replace(/'/g, "''").replace(/%/g, '\\%');
+    const searchCond = cfg.searchFields
+      .map(f => `UPPER(IFNULL(${f},'')) LIKE UPPER('%${q}%')`)
+      .join(' OR ');
+    conditions.push(`(${searchCond})`);
+  }
+  if (tipo)       conditions.push(`UPPER(IFNULL(${cfg.tipoField},'')) = UPPER('${tipo.replace(/'/g, "''")}')`);
+  if (estado)     conditions.push(`UPPER(IFNULL(${cfg.estadoField},'')) = UPPER('${estado.replace(/'/g, "''")}')`);
+  if (fechaDesde) conditions.push(`${cfg.dateField} >= '${fechaDesde}'`);
+  if (fechaHasta) conditions.push(`${cfg.dateField} <= '${fechaHasta}'`);
+
+  const where = conditions.join(' AND ');
+
+  // Consulta de datos
+  const dataSQL = `
+    SELECT * EXCEPT(entidades_mintic, roles_mintic),
+           ARRAY_TO_STRING(entidades_mintic, ',') AS entidades_mintic_str,
+           ARRAY_TO_STRING(roles_mintic, ',')     AS roles_mintic_str
+    FROM ${fullTable}
+    WHERE ${where}
+    ORDER BY ${cfg.dateField} DESC NULLS LAST
+    LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
+  `;
+
+  // Consulta de conteo y valor total
+  const countSQL = `
+    SELECT
+      COUNT(*) AS total,
+      COALESCE(SUM(CAST(${cfg.valueField} AS FLOAT64)), 0) AS valor_total,
+      COUNTIF(UPPER(IFNULL(${cfg.estadoField},'')) LIKE '%EJECUCION%') AS en_ejecucion,
+      COUNTIF(UPPER(IFNULL(${cfg.estadoField},'')) LIKE '%ADICION%' 
+           OR UPPER(IFNULL(${cfg.estadoField},'')) LIKE '%MODIFICACION%') AS con_adicion
+    FROM ${fullTable}
+    WHERE ${where}
+  `;
+
+  const [[dataRows], [countRows]] = await Promise.all([
+    bq.query({ query: dataSQL, location: 'US' }),
+    bq.query({ query: countSQL, location: 'US' }),
+  ]);
+
+  const count = countRows[0] || { total: 0, valor_total: 0, en_ejecucion: 0, con_adicion: 0 };
+
+  return {
+    total:        Number(count.total),
+    valor_total:  Number(count.valor_total),
+    en_ejecucion: Number(count.en_ejecucion),
+    con_adicion:  Number(count.con_adicion),
+    limit:        parseInt(limit),
+    offset:       parseInt(offset),
+    data:         dataRows,
+    fuente:       'bigquery',
+    tabla,
+  };
+}
+
+/**
+ * Resumen consolidado de las 3 tablas para una entidad.
+ */
+export async function resumenEntidadBQ(entidadId) {
+  const tablas = ['secop_ii_contratos', 'secop_ii_procesos', 'tienda_virtual'];
+  const modos  = ['contratante', 'proveedor'];
+
+  const consultas = tablas.flatMap(tabla =>
+    modos.map(modo => ({ tabla, modo }))
+  );
+
+  const resultados = await Promise.allSettled(
+    consultas.map(({ tabla, modo }) => querySecopBQ(tabla, entidadId, modo, { limit: 1, offset: 0 }))
+  );
+
+  const resumen = {};
+  consultas.forEach(({ tabla, modo }, i) => {
+    if (!resumen[tabla]) resumen[tabla] = {};
+    resumen[tabla][modo] = resultados[i].status === 'fulfilled'
+      ? { total: resultados[i].value.total, valor_total: resultados[i].value.valor_total }
+      : { total: 0, valor_total: 0 };
+  });
+
+  return resumen;
+}
+
 export { bq, DATASET_ID, PROJECT_ID, TABLES };
+
