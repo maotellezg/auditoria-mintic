@@ -12,6 +12,7 @@ import UserAudit from './components/UserAudit';
 import Chat from './components/Chat';
 import SettingsView from './components/Settings';
 import SecopView from './components/SecopView';
+import BigQueryView from './components/BigQueryView';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { KeyRound, ShieldAlert, AlertCircle, CheckCircle, Eye, EyeOff, X } from 'lucide-react';
 
@@ -348,6 +349,8 @@ function AppContent() {
         );
       case 'secop':
         return <SecopView />;
+      case 'bigquery':
+        return <BigQueryView />;
       case 'configuracion':
         return userRole === 'administrador' ? (
           <SettingsView />

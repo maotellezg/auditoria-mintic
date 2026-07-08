@@ -12,6 +12,11 @@ import { extractTextFromDocument, splitTextIntoChunks } from './services/chunker
 import { VertexAI } from '@google-cloud/vertexai';
 import nodemailer from 'nodemailer';
 import { fetchContratante, countContratante, fetchProveedor, countProveedor, normalizarContrato, ENTIDADES_MINTIC, SECOP_SOURCES } from './services/secop.js';
+import { sincronizarTodo } from './services/secopSync.js';
+import { initBigQuery, queryBQ, DATASET_ID } from './services/bigquery.js';
+
+// Inicializar BigQuery al arrancar (crea dataset y tablas si no existen)
+initBigQuery().catch(err => console.warn('[BQ] Error al inicializar:', err.message));
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2124,6 +2129,126 @@ app.get('/api/secop/resumen/:entidadId', checkUser, async (req, res) => {
 });
 
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SECOP — Sincronización BigQuery (carga completa + incremental diaria)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Estado global del job de sync (solo 1 a la vez)
+let syncJobActivo = false;
+let syncJobResumen = null;
+
+/**
+ * GET /api/secop/sync-bigquery/status
+ * Estado actual del job de sincronización.
+ */
+app.get('/api/secop/sync-bigquery/status', checkUser, (req, res) => {
+  res.json({
+    activo: syncJobActivo,
+    ultimaSync: syncJobResumen
+  });
+});
+
+/**
+ * GET /api/secop/sync-bigquery/stream
+ * Server-Sent Events: inicia sincronización y envía progreso en tiempo real.
+ * El cliente recibe una línea por evento (data: mensaje\n\n).
+ */
+app.get('/api/secop/sync-bigquery/stream', checkUser, async (req, res) => {
+  // Configurar SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const send = (msg, tipo = 'progreso') => {
+    const payload = JSON.stringify({ tipo, msg, ts: new Date().toISOString() });
+    res.write(`data: ${payload}\n\n`);
+    if (res.flush) res.flush();
+  };
+
+  if (syncJobActivo) {
+    send('⚠️ Ya hay una sincronización en curso. Espera a que termine.', 'aviso');
+    res.write('data: {"tipo":"fin","msg":""} \n\n');
+    return res.end();
+  }
+
+  syncJobActivo = true;
+  send('🚀 Iniciando carga completa a BigQuery...', 'inicio');
+
+  try {
+    const resumen = await sincronizarTodo((msg) => send(msg));
+    syncJobResumen = resumen;
+    send(`✅ Listo | ${resumen.filasUnicas} filas únicas en BQ | ${resumen.duracionSeg}s`, 'fin');
+    res.write(`data: ${JSON.stringify({ tipo: 'resumen', resumen })}\n\n`);
+  } catch (err) {
+    send(`❌ Error fatal: ${err.message}`, 'error');
+  } finally {
+    syncJobActivo = false;
+    res.write('data: {"tipo":"fin","msg":"Proceso terminado"}\n\n');
+    res.end();
+  }
+});
+
+/**
+ * POST /api/secop/sync-bigquery
+ * Sincronización sin SSE (para Cloud Scheduler / llamadas programadas).
+ * Retorna JSON con resumen al finalizar.
+ */
+app.post('/api/secop/sync-bigquery', async (req, res) => {
+  // Verificar token de Cloud Scheduler (header X-Sync-Secret)
+  const secret = req.headers['x-sync-secret'];
+  const SYNC_SECRET = process.env.SYNC_SECRET || 'sync-mintic-2024';
+  if (secret !== SYNC_SECRET) {
+    return res.status(403).json({ error: 'Acceso denegado.' });
+  }
+  if (syncJobActivo) {
+    return res.status(409).json({ error: 'Sync ya en curso.' });
+  }
+  syncJobActivo = true;
+  try {
+    const resumen = await sincronizarTodo();
+    syncJobResumen = resumen;
+    return res.json({ ok: true, resumen });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  } finally {
+    syncJobActivo = false;
+  }
+});
+
+/**
+ * GET /api/secop/bigquery/stats
+ * Estadísticas de las tablas en BigQuery: total filas, última carga, top entidades.
+ */
+app.get('/api/secop/bigquery/stats', checkUser, async (req, res) => {
+  try {
+    const [contratos, procesos, tienda] = await Promise.all([
+      queryBQ(`SELECT COUNT(*) AS total, MAX(_fecha_carga) AS ultima_carga,
+                      COUNTIF('mintic' IN UNNEST(entidades_mintic)) AS filas_mintic
+               FROM \`${process.env.GCP_PROJECT_ID || 'auditoria-mintc'}.${DATASET_ID}.secop_ii_contratos\``),
+      queryBQ(`SELECT COUNT(*) AS total, MAX(_fecha_carga) AS ultima_carga,
+                      COUNTIF('mintic' IN UNNEST(entidades_mintic)) AS filas_mintic
+               FROM \`${process.env.GCP_PROJECT_ID || 'auditoria-mintc'}.${DATASET_ID}.secop_ii_procesos\``),
+      queryBQ(`SELECT COUNT(*) AS total, MAX(_fecha_carga) AS ultima_carga,
+                      COUNTIF('mintic' IN UNNEST(entidades_mintic)) AS filas_mintic
+               FROM \`${process.env.GCP_PROJECT_ID || 'auditoria-mintc'}.${DATASET_ID}.tienda_virtual\``),
+    ]);
+
+    return res.json({
+      tablas: [
+        { id: 'secop_ii_contratos', label: 'SECOP II Contratos', ...contratos[0] },
+        { id: 'secop_ii_procesos',  label: 'SECOP II Procesos',  ...procesos[0]  },
+        { id: 'tienda_virtual',     label: 'Tienda Virtual',     ...tienda[0]    },
+      ],
+      syncActivo: syncJobActivo,
+      ultimaSync: syncJobResumen
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 // Cualquier otra ruta no-API debe retornar el index.html del frontend
 app.get('*', (req, res) => {
