@@ -604,6 +604,19 @@ export default function UserManagement() {
           )}
 
           <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+            {/* Info badge */}
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: '10px',
+              background: 'rgba(0, 242, 254, 0.05)',
+              border: '1px solid rgba(0, 242, 254, 0.15)',
+              borderRadius: '8px', padding: '10px 14px', fontSize: '0.8rem',
+              color: 'var(--text-secondary)', lineHeight: 1.5
+            }}>
+              <Mail size={15} color="var(--color-primary)" style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>El usuario recibirá un <strong style={{ color: 'var(--text-main)' }}>correo de activación automático</strong> con un enlace para crear su propia contraseña.</span>
+            </div>
+
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label htmlFor="newUserEmail">Correo Electrónico</label>
               <input
@@ -615,21 +628,6 @@ export default function UserManagement() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
-            </div>
-
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label htmlFor="newUserPassword">Contraseña Inicial</label>
-              <input
-                id="newUserPassword"
-                type="password"
-                className="form-input"
-                placeholder="Opcional (activación por correo)"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '4px 0 0 0', lineHeight: 1.3 }}>
-                Si se deja vacío, se generará un enlace de activación seguro de Firebase.
-              </p>
             </div>
 
             <div className="form-group" style={{ marginBottom: 0 }}>
@@ -646,12 +644,14 @@ export default function UserManagement() {
               </select>
             </div>
 
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '8px' }} disabled={createLoading}>
-              {createLoading ? (
-                <span className="loading-spin" style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #000', borderTopColor: 'transparent', borderRadius: '50%' }}></span>
-              ) : 'Registrar Cuenta'}
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }} disabled={createLoading}>
+              {createLoading
+                ? <><span className="loading-spin" style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #000', borderTopColor: 'transparent', borderRadius: '50%' }}></span> Creando...</>
+                : <><UserPlus size={16} /> Crear y Enviar Correo</>
+              }
             </button>
           </form>
+
         </div>
 
         {/* Tabla / Listado de Usuarios */}
