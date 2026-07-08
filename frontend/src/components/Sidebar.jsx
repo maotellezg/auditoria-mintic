@@ -1,4 +1,4 @@
-import { LayoutDashboard, UploadCloud, BookOpen, LogOut, FileText, Users, History, KeyRound, MessageSquare, Settings, Building2, Database } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, BookOpen, LogOut, FileText, Users, History, KeyRound, MessageSquare, Settings, Building2, Database, BarChart2 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
 
@@ -72,6 +72,16 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword 
           >
             <Database size={20} />
             <span>BigQuery SECOP</span>
+          </div>
+        </li>
+
+        <li>
+          <div
+            className={`sidebar-link ${activeTab === 'analisis' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analisis')}
+          >
+            <BarChart2 size={20} />
+            <span>📊 Análisis</span>
           </div>
         </li>
 

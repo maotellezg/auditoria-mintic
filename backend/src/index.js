@@ -14,6 +14,10 @@ import nodemailer from 'nodemailer';
 import { fetchContratante, countContratante, fetchProveedor, countProveedor, normalizarContrato, ENTIDADES_MINTIC, SECOP_SOURCES } from './services/secop.js';
 import { sincronizarTodo } from './services/secopSync.js';
 import { initBigQuery, queryBQ, querySecopBQ, resumenEntidadBQ, DATASET_ID } from './services/bigquery.js';
+import { indexarContratosEnRAG } from './services/bqRagIndexer.js';
+import { kpisComparativos, serieMensual, tiposContrato, modalidades, topContratistas, prestacionServicios, heatmapMensual, alertasRiesgo, topContratosValor } from './services/analytics.js';
+
+
 
 
 // Inicializar BigQuery al arrancar (crea dataset y tablas si no existen)
@@ -1726,6 +1730,14 @@ TUS CAPACIDADES
 5. 👤 IDENTIFICADOR DE PERSONAS: Extraes y cruzas personas entre documentos —
    firmantes, contratistas, beneficiarios, declarantes, redes de relaciones.
 
+5. 🗄️ ANALISTA SECOP/BIGQUERY: Tienes acceso directo a los datos de contratación pública
+   del sector TIC colombiano cargados en BigQuery (SECOP II Contratos, Procesos, Tienda Virtual).
+   Estos datos están indexados en la capa semántica y disponibles como fragmentos [BQ-SECOP|...].
+   Puedes responder preguntas sobre: contratos específicos, contratistas, valores, fechas,
+   tipos de contrato, comparaciones entre gobiernos Duque y Petro, prestación de servicios,
+   entidades MinTIC, ANE, CRC, AND, FUTIC, RTVC, 4-72. Cuando veas fragmentos [BQ-SECOP|...]
+   en el contexto, úsalos como datos reales de contratos SECOP para responder con precisión.
+
 6. 🌐 ASISTENTE GENERAL: Respondes cualquier pregunta relacionada con auditoría,
    gobierno, sector TIC, contratación pública o cualquier tema que el auditor necesite.
 
@@ -1738,15 +1750,19 @@ ANÁLISIS FORENSE (cuando aplique)
 - 🟡 Supervisores que también son contratistas en otros documentos
 - 🟡 Fechas inconsistentes o plazos vencidos
 - 🟡 Empresas creadas poco antes de recibir contratos
+- 🟡 Alta concentración de prestación de servicios → posible nómina paralela
+- 🔴 Contratistas que concentran > 20% del presupuesto de una entidad
 
 ════════════════════════════════════════════════════
 FORMATO DE RESPUESTA
 ════════════════════════════════════════════════════
 - Cita documentos: [Doc:docId|nombreArchivo] después de cada afirmación documental
+- Cita datos BQ: [BQ-SECOP|entidad|referencia] cuando uses datos de contratos BigQuery
 - 🔴 alertas críticas  |  🟡 alertas moderadas  |  🟢 hallazgos normales
 - 📋 resumen de doc   |  👤 persona   |  💰 dato financiero  |  ⚖️ normativa
 - Termina SIEMPRE con "💡 Recomendaciones para el auditor"
 `;
+
 
     // ── 7. Construir prompt completo ─────────────────────────────────────────
     const promptText = `
@@ -2211,6 +2227,11 @@ app.post('/api/secop/sync-bigquery', async (req, res) => {
   try {
     const resumen = await sincronizarTodo();
     syncJobResumen = resumen;
+    // ── Después del sync: re-indexar contratos en la capa semántica RAG ──
+    console.log('[SYNC] Iniciando re-indexación BQ→RAG en background...');
+    indexarContratosEnRAG({ db, getEmbedding })
+      .then(r => console.log('[BQ-RAG] Indexación completada:', r))
+      .catch(e => console.error('[BQ-RAG] Error indexando:', e.message));
     return res.json({ ok: true, resumen });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -2218,6 +2239,21 @@ app.post('/api/secop/sync-bigquery', async (req, res) => {
     syncJobActivo = false;
   }
 });
+
+/**
+ * POST /api/secop/index-bq-rag
+ * Disparo manual: convierte contratos BQ → chunks RAG en Firestore.
+ * Requiere autenticación. Tarda varios minutos según volumen.
+ */
+app.post('/api/secop/index-bq-rag', checkUser, async (req, res) => {
+  const { entidadId, limite } = req.body || {};
+  res.json({ ok: true, mensaje: 'Indexación BQ→RAG iniciada en background. El chat usará los contratos en ~2 minutos.' });
+  // Corre en background sin bloquear la respuesta HTTP
+  indexarContratosEnRAG({ db, getEmbedding, entidadId, limite: limite || 2000 })
+    .then(r => console.log('[BQ-RAG] Manual index completo:', r))
+    .catch(e => console.error('[BQ-RAG] Manual index error:', e.message));
+});
+
 
 /**
  * GET /api/secop/bigquery/stats
@@ -2249,6 +2285,64 @@ app.get('/api/secop/bigquery/stats', checkUser, async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ANALYTICS — Dashboard comparativo Duque vs Petro (detección de corrupción)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** GET /api/analytics/kpis/:entidadId */
+app.get('/api/analytics/kpis/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await kpisComparativos(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/kpis]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/analytics/serie-mensual/:entidadId */
+app.get('/api/analytics/serie-mensual/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await serieMensual(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/serie-mensual]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/analytics/tipos/:entidadId */
+app.get('/api/analytics/tipos/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await tiposContrato(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/tipos]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/analytics/modalidades/:entidadId */
+app.get('/api/analytics/modalidades/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await modalidades(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/modalidades]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/analytics/top-contratistas/:entidadId */
+app.get('/api/analytics/top-contratistas/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await topContratistas(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/top-contratistas]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/analytics/prestacion-servicios/:entidadId */
+app.get('/api/analytics/prestacion-servicios/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await prestacionServicios(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/prestacion-servicios]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/analytics/heatmap/:entidadId */
+app.get('/api/analytics/heatmap/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await heatmapMensual(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/heatmap]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/analytics/alertas/:entidadId */
+app.get('/api/analytics/alertas/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await alertasRiesgo(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/alertas]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/analytics/top-contratos/:entidadId */
+app.get('/api/analytics/top-contratos/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await topContratosValor(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/top-contratos]', e.message); res.status(500).json({ error: e.message }); }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
