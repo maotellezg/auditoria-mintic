@@ -399,7 +399,7 @@ export default function AnalisisView() {
   const { currentUser } = useAuth();
   const [entidadId, setEntidadId] = useState('mintic');
   const [activeTab, setActiveTab] = useState('resumen');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState('');
 
   // Data states
@@ -416,6 +416,7 @@ export default function AnalisisView() {
   const [directosNPS, setDirectosNPS] = useState(null);
   const [loadingPS, setLoadingPS] = useState(false);
   const [loadingNPS, setLoadingNPS] = useState(false);
+  const [error, setError] = useState(null);
 
   // Sort state for contratistas table
   const [sortField, setSortField] = useState('valor_total');
@@ -435,20 +436,32 @@ export default function AnalisisView() {
       const token = await currentUser.getIdToken();
       const headers = { Authorization: `Bearer ${token}` };
 
+      // Wrap each fetch so a single failure doesn't kill all data
+      const safeJson = async (url, hdrs) => {
+        try {
+          const r = await fetch(url, { headers: hdrs });
+          if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
+          return await r.json();
+        } catch (e) {
+          console.warn('[AnalisisView] fetch failed:', url, e.message);
+          return null;
+        }
+      };
+
       const [kpisR, serieR, tiposR, modsR, contratistasR, prestacionR, heatmapR, alertasR, topR] =
         await Promise.all([
-          fetch(`/api/analytics/kpis/${eid}`, { headers }).then(r => r.json()),
-          fetch(`/api/analytics/serie-mensual/${eid}`, { headers }).then(r => r.json()),
-          fetch(`/api/analytics/tipos/${eid}`, { headers }).then(r => r.json()),
-          fetch(`/api/analytics/modalidades/${eid}`, { headers }).then(r => r.json()),
-          fetch(`/api/analytics/top-contratistas/${eid}`, { headers }).then(r => r.json()),
-          fetch(`/api/analytics/prestacion-servicios/${eid}`, { headers }).then(r => r.json()),
-          fetch(`/api/analytics/heatmap/${eid}`, { headers }).then(r => r.json()),
-          fetch(`/api/analytics/alertas/${eid}`, { headers }).then(r => r.json()),
-          fetch(`/api/analytics/top-contratos/${eid}`, { headers }).then(r => r.json()),
+          safeJson(`/api/analytics/kpis/${eid}`, headers),
+          safeJson(`/api/analytics/serie-mensual/${eid}`, headers),
+          safeJson(`/api/analytics/tipos/${eid}`, headers),
+          safeJson(`/api/analytics/modalidades/${eid}`, headers),
+          safeJson(`/api/analytics/top-contratistas/${eid}`, headers),
+          safeJson(`/api/analytics/prestacion-servicios/${eid}`, headers),
+          safeJson(`/api/analytics/heatmap/${eid}`, headers),
+          safeJson(`/api/analytics/alertas/${eid}`, headers),
+          safeJson(`/api/analytics/top-contratos/${eid}`, headers),
         ]);
 
-      setKpis(Array.isArray(kpisR) ? kpisR[0] : kpisR);
+      setKpis(kpisR ? (Array.isArray(kpisR) ? kpisR[0] : kpisR) : null);
       setSerie(Array.isArray(serieR) ? serieR : []);
       setTipos(Array.isArray(tiposR) ? tiposR : []);
       setMods(Array.isArray(modsR) ? modsR : []);
@@ -457,8 +470,13 @@ export default function AnalisisView() {
       setHeatmap(Array.isArray(heatmapR) ? heatmapR : []);
       setAlertas(Array.isArray(alertasR) ? alertasR : []);
       setTopContratos(Array.isArray(topR) ? topR : []);
+
+      // Surface a top-level error only if kpis is null (core data failed)
+      if (!kpisR) setError('No se pudieron cargar los KPIs desde el backend. Revisa la consola para detalles.');
+      else setError(null);
     } catch (err) {
       console.error('[AnalisisView] fetch error:', err);
+      setError(err.message || 'Error cargando datos del dashboard');
     } finally {
       setLoading(false);
     }
@@ -773,6 +791,26 @@ export default function AnalisisView() {
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div style={{ background: '#F4F6FB', minHeight: '100%', padding: '0 0 40px 0' }}>
+      {/* ── Shimmer keyframes (required by Skeleton component) ── */}
+      <style>{`
+        @keyframes shimmer {
+          0%   { background-position: -400% 0; }
+          100% { background-position:  400% 0; }
+        }
+        @keyframes spin {
+          0%   { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+      {/* ── Error banner ── */}
+      {error && (
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#C0392B', marginBottom: 8 }}>Error cargando el dashboard</div>
+          <div style={{ fontSize: 14, color: '#6B7280', marginBottom: 24 }}>{error}</div>
+          <button onClick={() => { setError(null); fetchAll(entidadId); }} style={{ padding: '10px 24px', background: '#15234E', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Reintentar</button>
+        </div>
+      )}
       {/* ── Top bar ── */}
       <div style={{
         background: '#fff', borderBottom: '1px solid #E8ECF4',
@@ -912,7 +950,18 @@ export default function AnalisisView() {
                   <KpiCard icon="📋" label="% Prestación de Servicios" valueD={kpis.duque_pct_prestacion}  valueP={kpis.petro_pct_prestacion} fmt={PCT} isRisk />
                   <KpiCard icon="➕" label="% Contratos Adicionados"   valueD={kpis.duque_pct_adicionados} valueP={kpis.petro_pct_adicionados} fmt={PCT} isRisk />
                 </>
-              ) : null}
+              ) : (
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '48px 0' }}>
+                  <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Sin datos disponibles</div>
+                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>
+                    No hay contratos registrados para <strong>{entidadActiva.nombre}</strong> o el backend no devolvió datos.
+                  </div>
+                  <button onClick={() => fetchAll(entidadId)} style={{ marginTop: 20, padding: '8px 22px', background: '#15234E', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                    🔄 Reintentar
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Monthly Area Chart */}
