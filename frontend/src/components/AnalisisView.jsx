@@ -414,10 +414,27 @@ export default function AnalisisView() {
   const [alertas, setAlertas] = useState([]);
   const [topContratos, setTopContratos] = useState([]);
   const [psDetalle, setPsDetalle] = useState(null);
+  const [psError, setPsError] = useState(null);
   const [directosNPS, setDirectosNPS] = useState(null);
+  const [npsError, setNpsError] = useState(null);
   const [loadingPS, setLoadingPS] = useState(false);
   const [loadingNPS, setLoadingNPS] = useState(false);
   const [error, setError] = useState(null);
+
+  // Helper compartido para fetches de detalle con manejo de auth robusto
+  const fetchDetalle = useCallback(async (endpoint) => {
+    if (!currentUser) throw new Error('Sesión no iniciada. Por favor recarga la página.');
+    const token = await currentUser.getIdToken(true); // true = forzar refresh del token
+    const r = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) {
+      let msg = `Error ${r.status}`;
+      try { const e = await r.json(); msg = e.error || msg; } catch {}
+      throw new Error(msg);
+    }
+    const d = await r.json();
+    if (d && d.error) throw new Error(d.error);
+    return d;
+  }, [currentUser]);
 
   // Sort state for contratistas table
   const [sortField, setSortField] = useState('valor_total');
@@ -1284,23 +1301,25 @@ export default function AnalisisView() {
                 <p style={{ color: '#6B7280', marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
                   Comparativo Duque vs Petro por año, personas repetidas entre entidades, contratistas activos en 2026 y top ganadores.
                 </p>
+                {psError && (
+                  <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '12px 20px', marginBottom: 16, color: '#B91C1C', fontSize: 13, maxWidth: 500, margin: '0 auto 16px' }}>
+                    ⚠️ {psError}
+                  </div>
+                )}
                 <button onClick={async () => {
+                  setPsError(null);
                   setLoadingPS(true);
                   try {
-                    const token = await currentUser.getIdToken();
-                    const r = await fetch(`/api/analytics/prestacion-detalle/${entidadId}`, { headers: { Authorization: `Bearer ${token}` } });
-                    if (!r.ok) throw new Error(`Error ${r.status}: ${r.statusText}`);
-                    const d = await r.json();
-                    if (d.error) throw new Error(d.error);
+                    const d = await fetchDetalle(`/api/analytics/prestacion-detalle/${entidadId}`);
                     setPsDetalle(d);
                   } catch(e) {
                     console.error('[PS-Detalle]', e);
-                    alert('Error cargando Prestación de Servicios:\n' + e.message);
+                    setPsError(e.message);
                   } finally {
                     setLoadingPS(false);
                   }
                 }} style={{ background: '#214E92', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 32px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-                  📊 Cargar Análisis
+                  📊 {psError ? 'Reintentar' : 'Cargar Análisis'}
                 </button>
               </div>
             )}
@@ -1460,23 +1479,25 @@ export default function AnalisisView() {
                 <p style={{ color: '#6B7280', marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
                   Análisis completo de contratos adjudicados por contratación directa que NO son prestación de servicios: suministros, obras, consultorías, arrendamientos, etc.
                 </p>
+                {npsError && (
+                  <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '12px 20px', marginBottom: 16, color: '#B91C1C', fontSize: 13, maxWidth: 500, margin: '0 auto 16px' }}>
+                    ⚠️ {npsError}
+                  </div>
+                )}
                 <button onClick={async () => {
+                  setNpsError(null);
                   setLoadingNPS(true);
                   try {
-                    const token = await currentUser.getIdToken();
-                    const r = await fetch(`/api/analytics/directos-no-ps/${entidadId}`, { headers: { Authorization: `Bearer ${token}` } });
-                    if (!r.ok) throw new Error(`Error ${r.status}: ${r.statusText}`);
-                    const d = await r.json();
-                    if (d.error) throw new Error(d.error);
+                    const d = await fetchDetalle(`/api/analytics/directos-no-ps/${entidadId}`);
                     setDirectosNPS(d);
                   } catch(e) {
                     console.error('[Directos-NPS]', e);
-                    alert('Error cargando Directos No-PS:\n' + e.message);
+                    setNpsError(e.message);
                   } finally {
                     setLoadingNPS(false);
                   }
                 }} style={{ background: '#7B2D8B', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 32px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-                  📊 Cargar Análisis
+                  📊 {npsError ? 'Reintentar' : 'Cargar Análisis'}
                 </button>
               </div>
             )}
