@@ -1828,7 +1828,7 @@ app.use(express.static(publicPath));
 // ═══════════════════════════════════════════════════════════════
 
 // POST /api/secop/sync/:sector — Descarga SECOP II y guarda en BigQuery
-app.post('/api/secop/sync/:sector', verifyToken, async (req, res) => {
+app.post('/api/secop/sync/:sector', async (req, res) => {
   const { sector } = req.params;
   if (!['mintic', 'ambiente'].includes(sector)) {
     return res.status(400).json({ error: 'Sector inválido. Use mintic o ambiente.' });
@@ -1844,7 +1844,7 @@ app.post('/api/secop/sync/:sector', verifyToken, async (req, res) => {
 });
 
 // GET /api/secop/status/:sector — Estado de la última ingesta
-app.get('/api/secop/status/:sector', verifyToken, async (req, res) => {
+app.get('/api/secop/status/:sector', async (req, res) => {
   try {
     const info = await secopBQ.queryUltimaIngesta(req.params.sector);
     res.json(info);
@@ -1854,7 +1854,7 @@ app.get('/api/secop/status/:sector', verifyToken, async (req, res) => {
 });
 
 // GET /api/secop/resumen/:sector — Resumen ejecutivo por período
-app.get('/api/secop/resumen/:sector', verifyToken, async (req, res) => {
+app.get('/api/secop/resumen/:sector', async (req, res) => {
   try {
     const rows = await secopBQ.queryResumenPeriodos(req.params.sector);
     res.json(rows);
@@ -1864,7 +1864,7 @@ app.get('/api/secop/resumen/:sector', verifyToken, async (req, res) => {
 });
 
 // GET /api/secop/ps-directos/:sector — PS directos por período
-app.get('/api/secop/ps-directos/:sector', verifyToken, async (req, res) => {
+app.get('/api/secop/ps-directos/:sector', async (req, res) => {
   try {
     const rows = await secopBQ.queryPSDirectos(req.params.sector);
     res.json(rows);
@@ -1874,7 +1874,7 @@ app.get('/api/secop/ps-directos/:sector', verifyToken, async (req, res) => {
 });
 
 // GET /api/secop/otros-directos/:sector — Otros contratos directos
-app.get('/api/secop/otros-directos/:sector', verifyToken, async (req, res) => {
+app.get('/api/secop/otros-directos/:sector', async (req, res) => {
   try {
     const rows = await secopBQ.queryOtrosDirectos(req.params.sector);
     res.json(rows);
@@ -1884,7 +1884,7 @@ app.get('/api/secop/otros-directos/:sector', verifyToken, async (req, res) => {
 });
 
 // GET /api/secop/cruce/:sector — Contratistas en múltiples entidades
-app.get('/api/secop/cruce/:sector', verifyToken, async (req, res) => {
+app.get('/api/secop/cruce/:sector', async (req, res) => {
   try {
     const rows = await secopBQ.queryCruceEntidades(req.params.sector);
     res.json(rows);
@@ -1894,7 +1894,7 @@ app.get('/api/secop/cruce/:sector', verifyToken, async (req, res) => {
 });
 
 // GET /api/secop/continuaciones/:sector — Contratistas Duque que continúan en 2026
-app.get('/api/secop/continuaciones/:sector', verifyToken, async (req, res) => {
+app.get('/api/secop/continuaciones/:sector', async (req, res) => {
   try {
     const rows = await secopBQ.queryContinuaciones2026(req.params.sector);
     res.json(rows);
@@ -1902,6 +1902,7 @@ app.get('/api/secop/continuaciones/:sector', verifyToken, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(publicPath, 'index.html'));
