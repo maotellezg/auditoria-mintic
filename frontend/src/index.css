@@ -347,7 +347,7 @@ body {
   justify-content: center;
   min-height: 100vh;
   padding: 20px;
-  background: var(--gradient-dark);
+  background: linear-gradient(135deg, #f0f4f8 0%, #e8eef5 50%, #dde6f0 100%);
 }
 
 .auth-card {
