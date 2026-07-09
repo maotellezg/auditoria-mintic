@@ -110,48 +110,45 @@ export async function indexarContratosEnRAG({ db, getEmbedding, entidadId, limit
       const [rows] = await bq.query({ query: sql, location: 'US' });
       console.log(`[BQ-RAG] ${eid}: ${rows.length} contratos obtenidos de BQ`);
 
-      // Procesar en lotes de 10 para no saturar Vertex AI Embeddings
-      const LOTE = 10;
-      for (let i = 0; i < rows.length; i += LOTE) {
-        const lote = rows.slice(i, i + LOTE).map(r => ({ ...serializeRow(r), _entidad_id: eid }));
+      // Procesar de uno en uno con pausa — evita saturar TLS de Vertex AI
+      const PAUSA_MS = 200; // 200ms entre embeddings (~5 req/s max)
+      for (let i = 0; i < rows.length; i++) {
+        const contrato = { ...serializeRow(rows[i]), _entidad_id: eid };
+        try {
+          const docId  = `bq_secop_${eid}_${contrato.referencia_del_contrato || contrato.id_contrato || i}`;
+          const texto  = contratoATexto(contrato);
+          const vector = await getEmbedding(texto); // retry interno en embeddings.js
 
-        await Promise.all(lote.map(async (contrato) => {
-          try {
-            const docId  = `bq_secop_${eid}_${contrato.referencia_del_contrato || contrato.id_contrato || i}`;
-            const texto  = contratoATexto(contrato);
-            const vector = await getEmbedding(texto);
+          await db.collection('document_chunks').doc(docId).set({
+            docId:      `bq_secop_${eid}`,
+            fileName:   `SECOP_BQ_${eid.toUpperCase()}_contratos`,
+            text:       texto,
+            embedding:  FieldValue.vector(vector),
+            fuente:     'bigquery',
+            tabla:      'secop_ii_contratos',
+            entidad:    eid,
+            referencia: contrato.referencia_del_contrato || contrato.id_contrato,
+            valor:      contrato.valor_del_contrato,
+            proveedor:  contrato.proveedor_adjudicado,
+            nit_proveedor: contrato.documento_proveedor,
+            fecha:      contrato.fecha_de_firma,
+            tipo:       contrato.tipo_de_contrato,
+            estado:     contrato.estado_contrato,
+            _indexado:  new Date().toISOString(),
+          }, { merge: false });
 
-            await db.collection('document_chunks').doc(docId).set({
-              docId:     `bq_secop_${eid}`,
-              fileName:  `SECOP_BQ_${eid.toUpperCase()}_contratos`,
-              text:      texto,
-              embedding: FieldValue.vector(vector),
-              // Metadatos para enriquecimiento del contexto
-              fuente:    'bigquery',
-              tabla:     'secop_ii_contratos',
-              entidad:   eid,
-              referencia: contrato.referencia_del_contrato || contrato.id_contrato,
-              valor:     contrato.valor_del_contrato,
-              proveedor: contrato.proveedor_adjudicado,
-              nit_proveedor: contrato.documento_proveedor,
-              fecha:     contrato.fecha_de_firma,
-              tipo:      contrato.tipo_de_contrato,
-              estado:    contrato.estado_contrato,
-              _indexado: new Date().toISOString(),
-            }, { merge: false }); // Sobreescribir para mantener fresco
+          indexed++;
+          if (indexed % 25 === 0) console.log(`[BQ-RAG] ${eid}: ${indexed} indexados...`);
 
-            indexed++;
-          } catch (chunkErr) {
-            console.warn(`[BQ-RAG] Error en chunk ${contrato.referencia_del_contrato}:`, chunkErr.message);
-            errors++;
-          }
-        }));
-
-        // Pausa entre lotes para respetar rate limits de Vertex AI
-        if (i + LOTE < rows.length) {
-          await new Promise(r => setTimeout(r, 500));
+        } catch (chunkErr) {
+          console.warn(`[BQ-RAG] Error en chunk ${contrato.referencia_del_contrato}:`, chunkErr.message);
+          errors++;
         }
+
+        // Pausa entre cada embedding para no saturar la API TLS
+        if (i < rows.length - 1) await new Promise(r => setTimeout(r, PAUSA_MS));
       }
+
 
       console.log(`[BQ-RAG] ${eid}: indexados ${Math.min(rows.length, limite)} contratos`);
 

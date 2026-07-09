@@ -4,75 +4,88 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const projectId = process.env.GCP_PROJECT_ID || 'auditoria-mintc';
-const location = process.env.GCP_LOCATION || 'us-central1';
+const location  = process.env.GCP_LOCATION   || 'us-central1';
 
 const auth = new GoogleAuth({
   scopes: 'https://www.googleapis.com/auth/cloud-platform'
 });
 
+// Pausa helper
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 /**
- * Genera un vector embedding de 768 dimensiones para un fragmento de texto usando text-embedding-004 de Vertex AI a través de la API REST nativa.
- * @param {string} text - El texto del que se va a obtener el embedding
- * @returns {Promise<Array<number>>} El vector embedding de floats
+ * Genera un vector embedding con retry + exponential backoff.
+ * Reintentos: 3. Delays: 1s, 3s, 9s.
+ * Resuelve los errores de TLS / socket disconnect en Cloud Run.
  */
-export async function getEmbedding(text) {
+export async function getEmbedding(text, { maxRetries = 3 } = {}) {
   if (!text || typeof text !== 'string') {
     throw new Error('El texto para el embedding debe ser una cadena no vacía.');
   }
 
-  // Sanitizar texto quitando excesivos saltos de línea y caracteres extraños
-  const cleanText = text.replace(/\s+/g, ' ').trim();
+  const cleanText = text.replace(/\s+/g, ' ').trim().slice(0, 8000); // limitar tokens
 
-  try {
-    // Obtener token de acceso de Google Cloud de forma dinámica
-    const client = await auth.getClient();
-    const tokenResponse = await client.getAccessToken();
-    const token = tokenResponse.token;
+  const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/text-embedding-004:predict`;
 
-    if (!token) {
-      throw new Error('No se pudo obtener un token de acceso de Google Cloud.');
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Token fresco en cada intento (evita tokens expirados)
+      const client        = await auth.getClient();
+      const tokenResponse = await client.getAccessToken();
+      const token         = tokenResponse.token;
+      if (!token) throw new Error('No se pudo obtener token de acceso de GCP.');
+
+      // AbortController para timeout de 30 segundos
+      const controller = new AbortController();
+      const timeoutId  = setTimeout(() => controller.abort(), 30_000);
+
+      let response;
+      try {
+        response = await fetch(url, {
+          method:  'POST',
+          signal:  controller.signal,
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type':  'application/json',
+            'Connection':    'keep-alive',
+          },
+          body: JSON.stringify({
+            instances:  [{ content: cleanText }],
+            parameters: { autoTruncate: true, outputDimensionality: 768 },
+          }),
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Vertex AI HTTP ${response.status}: ${errText.slice(0, 200)}`);
+      }
+
+      const data = await response.json();
+      const values = data?.predictions?.[0]?.embeddings?.values;
+      if (!Array.isArray(values)) {
+        throw new Error('Respuesta de Vertex AI sin embedding válido.');
+      }
+      return values;
+
+    } catch (err) {
+      lastError = err;
+      const isTLS    = err.message?.includes('TLS') || err.message?.includes('socket') ||
+                       err.message?.includes('fetch failed') || err.name === 'AbortError';
+      const isRetry  = isTLS && attempt < maxRetries;
+
+      if (isRetry) {
+        const delay = 1000 * Math.pow(3, attempt - 1); // 1s, 3s, 9s
+        console.warn(`[embedding] Intento ${attempt}/${maxRetries} falló (${err.message?.slice(0,60)}). Reintentando en ${delay/1000}s...`);
+        await sleep(delay);
+      } else {
+        console.error(`[embedding] Falló definitivamente tras ${attempt} intentos:`, err.message);
+        throw err;
+      }
     }
-
-    const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/text-embedding-004:predict`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        instances: [
-          { content: cleanText }
-        ],
-        parameters: {
-          autoTruncate: true,
-          outputDimensionality: 768
-        }
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error en API REST de Vertex AI (Status ${response.status}): ${errorText}`);
-    }
-
-    const data = await response.json();
-
-    if (
-      data &&
-      Array.isArray(data.predictions) &&
-      data.predictions[0] &&
-      data.predictions[0].embeddings &&
-      Array.isArray(data.predictions[0].embeddings.values)
-    ) {
-      return data.predictions[0].embeddings.values;
-    } else {
-      console.error('Estructura de respuesta REST de embeddings inesperada:', JSON.stringify(data));
-      throw new Error('La respuesta de Vertex AI REST no contiene un embedding válido en predictions[0].embeddings.values');
-    }
-  } catch (error) {
-    console.error('Error al generar embedding con API REST text-embedding-004:', error);
-    throw error;
   }
+  throw lastError;
 }
