@@ -11,6 +11,7 @@ import UserManagement from './components/UserManagement';
 import UserAudit from './components/UserAudit';
 import Chat from './components/Chat';
 import SettingsView from './components/Settings';
+import ContratacionView from './components/ContratacionView';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { KeyRound, ShieldAlert, AlertCircle, CheckCircle, Eye, EyeOff, X } from 'lucide-react';
 
@@ -351,6 +352,10 @@ function AppContent() {
         ) : (
           <Dashboard onSelectDoc={(doc) => setSelectedDoc(doc)} />
         );
+      case 'contratacion-mintic':
+        return <ContratacionView sector="mintic" />;
+      case 'contratacion-ambiente':
+        return <ContratacionView sector="ambiente" />;
       default:
         return <Dashboard onSelectDoc={(doc) => setSelectedDoc(doc)} />;
     }
@@ -394,6 +399,16 @@ function AppContent() {
         return {
           title: 'Módulo de Auditoría Integral',
           subtitle: 'Trazabilidad de acciones del sistema, justificaciones de carga y rendimiento de Vertex AI'
+        };
+      case 'contratacion-mintic':
+        return {
+          title: 'Contratación Directa — Sector MINTIC',
+          subtitle: 'Análisis SECOP II · MinTIC · Computadores Para Educar · Comparativo Duque vs Petro'
+        };
+      case 'contratacion-ambiente':
+        return {
+          title: 'Contratación Directa — Sector Ambiente',
+          subtitle: 'Análisis SECOP II · MinAmbiente · ANLA · FONAM · Comparativo Duque vs Petro'
         };
       default:
         return {

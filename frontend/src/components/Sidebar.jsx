@@ -1,4 +1,4 @@
-import { LayoutDashboard, UploadCloud, BookOpen, LogOut, FileText, Users, History, KeyRound, MessageSquare, Settings } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, BookOpen, LogOut, FileText, Users, History, KeyRound, MessageSquare, Settings, Landmark, Leaf } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword }) {
@@ -63,6 +63,34 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword 
             <span>Auditoría</span>
           </div>
         </li>
+
+        {/* Separador contratación */}
+        <li style={{ padding: '8px 12px 4px', fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 4 }}>
+          Contratación SECOP
+        </li>
+
+        <li>
+          <div 
+            className={`sidebar-link ${activeTab === 'contratacion-mintic' ? 'active' : ''}`}
+            onClick={() => setActiveTab('contratacion-mintic')}
+            style={{ color: activeTab === 'contratacion-mintic' ? '#00f2fe' : undefined }}
+          >
+            <Landmark size={20} color={activeTab === 'contratacion-mintic' ? '#00f2fe' : undefined} />
+            <span>Sector MINTIC</span>
+          </div>
+        </li>
+
+        <li>
+          <div 
+            className={`sidebar-link ${activeTab === 'contratacion-ambiente' ? 'active' : ''}`}
+            onClick={() => setActiveTab('contratacion-ambiente')}
+            style={{ color: activeTab === 'contratacion-ambiente' ? '#43e97b' : undefined }}
+          >
+            <Leaf size={20} color={activeTab === 'contratacion-ambiente' ? '#43e97b' : undefined} />
+            <span>Sector Ambiente</span>
+          </div>
+        </li>
+
 
         {userRole === 'administrador' && (
           <li>
