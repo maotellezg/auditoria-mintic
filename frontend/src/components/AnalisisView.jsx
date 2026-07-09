@@ -15,6 +15,33 @@ import { useAuth } from '../context/AuthContext';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
+// ─── ErrorBoundary — captura crashes silenciosos de React ─────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  componentDidCatch(e, info) { console.error('[AnalisisView ErrorBoundary]', e, info); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 40, textAlign: 'center', background: '#FEF2F2', minHeight: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>💥</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: '#B91C1C', marginBottom: 8 }}>Error al renderizar el dashboard</div>
+          <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 8, maxWidth: 600 }}>{this.state.error.message}</div>
+          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 24, fontFamily: 'monospace', maxWidth: 700, wordBreak: 'break-all' }}>
+            {this.state.error.stack?.split('\n').slice(0,4).join(' | ')}
+          </div>
+          <button onClick={() => this.setState({ error: null })}
+            style={{ padding: '10px 28px', background: '#15234E', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
+            🔄 Reintentar
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const ENTIDADES = [
   { id: 'mintic', nombre: 'MinTIC', color: '#FF6900', nit: '899999053', icono: '🏛️' },
@@ -396,7 +423,7 @@ function addTableToPDF(pdf, headers, rows, startY, colWidths) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function AnalisisView() {
+function AnalisisViewInner() {
   const { currentUser } = useAuth();
   const [entidadId, setEntidadId] = useState('mintic');
   const [activeTab, setActiveTab] = useState('resumen');
@@ -1633,5 +1660,14 @@ export default function AnalisisView() {
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
+  );
+}
+
+// ─── Export envuelto en ErrorBoundary ─────────────────────────────────────────
+export default function AnalisisView() {
+  return (
+    <ErrorBoundary>
+      <AnalisisViewInner />
+    </ErrorBoundary>
   );
 }
