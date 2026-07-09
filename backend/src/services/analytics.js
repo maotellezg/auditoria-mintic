@@ -365,3 +365,213 @@ export async function topContratosValor(entidadId) {
   `;
   return runQuery(sql);
 }
+
+// ─── PRESTACIÓN DE SERVICIOS — análisis detallado ────────────────────────────
+export async function prestacionServiciosDetalle(entidadId) {
+  const f = baseFilter(entidadId);
+  const PS_FILTER = `(LOWER(tipo_de_contrato) LIKE '%prestaci%' OR LOWER(tipo_de_contrato) LIKE '%servicios%')
+                     AND LOWER(modalidad_de_contratacion) LIKE '%directa%'`;
+
+  // 1. Por año: cantidad y valores Duque vs Petro
+  const sqlAnual = `
+    SELECT
+      EXTRACT(YEAR FROM fecha_de_firma) AS anio,
+      CASE WHEN fecha_de_firma < '${PETRO_DESDE}' THEN 'Duque' ELSE 'Petro' END AS gobierno,
+      COUNT(*) AS n_contratos,
+      IFNULL(SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)), 0) AS valor_total,
+      COUNT(DISTINCT documento_proveedor) AS personas_unicas,
+      AVG(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_promedio
+    FROM ${TABLE}
+    WHERE ${f} AND ${PS_FILTER}
+      AND fecha_de_firma IS NOT NULL
+      AND fecha_de_firma >= '2021-08-07'
+    GROUP BY anio, gobierno
+    ORDER BY anio
+  `;
+
+  // 2. Personas que se repiten en múltiples entidades (gobierno Petro)
+  const sqlRepetidos = `
+    SELECT
+      documento_proveedor,
+      MAX(proveedor_adjudicado) AS nombre,
+      COUNT(DISTINCT entidad_contratante) AS n_entidades,
+      COUNT(*) AS n_contratos,
+      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
+      STRING_AGG(DISTINCT entidad_contratante ORDER BY entidad_contratante LIMIT 10) AS entidades
+    FROM ${TABLE}
+    WHERE ${PS_FILTER}
+      AND fecha_de_firma >= '${PETRO_DESDE}'
+      AND documento_proveedor IS NOT NULL
+    GROUP BY documento_proveedor
+    HAVING COUNT(DISTINCT entidad_contratante) > 1
+    ORDER BY valor_total DESC
+    LIMIT 100
+  `;
+
+  // 3. Contratistas Duque que continúan activos en 2026
+  const sqlContinuanDuque = `
+    SELECT
+      documento_proveedor,
+      MAX(proveedor_adjudicado) AS nombre,
+      COUNT(*) AS n_contratos_duque,
+      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_duque,
+      MAX(fecha_de_firma) AS ultima_firma_duque,
+      estado_contrato
+    FROM ${TABLE}
+    WHERE ${f} AND ${PS_FILTER}
+      AND fecha_de_firma BETWEEN '${DUQUE_DESDE}' AND '${DUQUE_HASTA}'
+      AND documento_proveedor IN (
+        SELECT DISTINCT documento_proveedor FROM ${TABLE}
+        WHERE ${f} AND ${PS_FILTER}
+          AND EXTRACT(YEAR FROM fecha_de_firma) = 2026
+      )
+    GROUP BY documento_proveedor, estado_contrato
+    ORDER BY valor_duque DESC
+    LIMIT 200
+  `;
+
+  // 4. Top 50 mayores ganadores gobierno Petro
+  const sqlTopGanadores = `
+    SELECT
+      documento_proveedor,
+      MAX(proveedor_adjudicado) AS nombre,
+      COUNT(*) AS n_contratos,
+      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
+      AVG(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_promedio,
+      MIN(EXTRACT(YEAR FROM fecha_de_firma)) AS primer_anio,
+      MAX(EXTRACT(YEAR FROM fecha_de_firma)) AS ultimo_anio,
+      COUNT(DISTINCT entidad_contratante) AS n_entidades
+    FROM ${TABLE}
+    WHERE ${f} AND ${PS_FILTER}
+      AND fecha_de_firma >= '${PETRO_DESDE}'
+      AND documento_proveedor IS NOT NULL
+    GROUP BY documento_proveedor
+    ORDER BY valor_total DESC
+    LIMIT 50
+  `;
+
+  // 5. Total acumulado Petro por año
+  const sqlTotalPetro = `
+    SELECT
+      EXTRACT(YEAR FROM fecha_de_firma) AS anio,
+      COUNT(*) AS n_contratos,
+      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
+      COUNT(DISTINCT documento_proveedor) AS personas
+    FROM ${TABLE}
+    WHERE ${f} AND ${PS_FILTER}
+      AND fecha_de_firma >= '${PETRO_DESDE}'
+    GROUP BY anio ORDER BY anio
+  `;
+
+  const [porAnio, repetidos, continuanDuque, topGanadores, totalPetro] = await Promise.all([
+    runQuery(sqlAnual),
+    runQuery(sqlRepetidos),
+    runQuery(sqlContinuanDuque),
+    runQuery(sqlTopGanadores),
+    runQuery(sqlTotalPetro),
+  ]);
+
+  return { porAnio, repetidos, continuanDuque, topGanadores, totalPetro };
+}
+
+// ─── DIRECTOS NO PRESTACIÓN — análisis completo ───────────────────────────────
+export async function directosNoPrestacion(entidadId) {
+  const f = baseFilter(entidadId);
+  const NPS_FILTER = `LOWER(modalidad_de_contratacion) LIKE '%directa%'
+                      AND NOT (LOWER(tipo_de_contrato) LIKE '%prestaci%' OR LOWER(tipo_de_contrato) LIKE '%servicios%')`;
+
+  // 1. Por año y gobierno
+  const sqlAnual = `
+    SELECT
+      EXTRACT(YEAR FROM fecha_de_firma) AS anio,
+      CASE WHEN fecha_de_firma < '${PETRO_DESDE}' THEN 'Duque' ELSE 'Petro' END AS gobierno,
+      tipo_de_contrato,
+      COUNT(*) AS n_contratos,
+      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
+      COUNT(DISTINCT documento_proveedor) AS proveedores_unicos
+    FROM ${TABLE}
+    WHERE ${f} AND ${NPS_FILTER}
+      AND fecha_de_firma IS NOT NULL
+      AND fecha_de_firma >= '${DUQUE_DESDE}'
+    GROUP BY anio, gobierno, tipo_de_contrato
+    ORDER BY anio, valor_total DESC
+  `;
+
+  // 2. Top tipos de contrato por valor
+  const sqlTipos = `
+    SELECT
+      tipo_de_contrato,
+      CASE WHEN fecha_de_firma < '${PETRO_DESDE}' THEN 'Duque' ELSE 'Petro' END AS gobierno,
+      COUNT(*) AS n_contratos,
+      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
+      AVG(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_promedio
+    FROM ${TABLE}
+    WHERE ${f} AND ${NPS_FILTER}
+      AND fecha_de_firma >= '${DUQUE_DESDE}'
+    GROUP BY tipo_de_contrato, gobierno
+    ORDER BY valor_total DESC
+    LIMIT 40
+  `;
+
+  // 3. Top proveedores directos no-PS gobierno Petro
+  const sqlTopProveedores = `
+    SELECT
+      documento_proveedor,
+      MAX(proveedor_adjudicado) AS nombre,
+      MAX(tipo_de_contrato) AS tipo_principal,
+      COUNT(*) AS n_contratos,
+      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
+      COUNT(DISTINCT tipo_de_contrato) AS tipos_distintos,
+      COUNT(DISTINCT entidad_contratante) AS n_entidades
+    FROM ${TABLE}
+    WHERE ${f} AND ${NPS_FILTER}
+      AND fecha_de_firma >= '${PETRO_DESDE}'
+      AND documento_proveedor IS NOT NULL
+    GROUP BY documento_proveedor
+    ORDER BY valor_total DESC
+    LIMIT 50
+  `;
+
+  // 4. Contratos de mayor valor directos no-PS (top 30)
+  const sqlTopContratos = `
+    SELECT
+      referencia_del_contrato,
+      objeto_del_contrato,
+      proveedor_adjudicado,
+      tipo_de_contrato,
+      estado_contrato,
+      fecha_de_firma,
+      SAFE_CAST(valor_del_contrato AS FLOAT64) AS valor_del_contrato,
+      CASE WHEN fecha_de_firma < '${PETRO_DESDE}' THEN 'Duque' ELSE 'Petro' END AS gobierno,
+      url_secop
+    FROM ${TABLE}
+    WHERE ${f} AND ${NPS_FILTER}
+      AND fecha_de_firma >= '${DUQUE_DESDE}'
+    ORDER BY SAFE_CAST(valor_del_contrato AS FLOAT64) DESC
+    LIMIT 30
+  `;
+
+  // 5. Comparativo Duque vs Petro KPIs
+  const sqlKpis = `
+    SELECT
+      COUNTIF(fecha_de_firma BETWEEN '${DUQUE_DESDE}' AND '${DUQUE_HASTA}') AS duque_n,
+      SUM(CASE WHEN fecha_de_firma BETWEEN '${DUQUE_DESDE}' AND '${DUQUE_HASTA}' THEN SAFE_CAST(valor_del_contrato AS FLOAT64) END) AS duque_valor,
+      COUNT(DISTINCT CASE WHEN fecha_de_firma BETWEEN '${DUQUE_DESDE}' AND '${DUQUE_HASTA}' THEN documento_proveedor END) AS duque_proveedores,
+      COUNTIF(fecha_de_firma >= '${PETRO_DESDE}') AS petro_n,
+      SUM(CASE WHEN fecha_de_firma >= '${PETRO_DESDE}' THEN SAFE_CAST(valor_del_contrato AS FLOAT64) END) AS petro_valor,
+      COUNT(DISTINCT CASE WHEN fecha_de_firma >= '${PETRO_DESDE}' THEN documento_proveedor END) AS petro_proveedores
+    FROM ${TABLE}
+    WHERE ${f} AND ${NPS_FILTER}
+      AND fecha_de_firma >= '${DUQUE_DESDE}'
+  `;
+
+  const [porAnio, porTipo, topProveedores, topContratos, kpis] = await Promise.all([
+    runQuery(sqlAnual),
+    runQuery(sqlTipos),
+    runQuery(sqlTopProveedores),
+    runQuery(sqlTopContratos),
+    runQuery(sqlKpis),
+  ]);
+
+  return { porAnio, porTipo, topProveedores, topContratos, kpis: kpis[0] || {} };
+}

@@ -15,7 +15,7 @@ import { fetchContratante, countContratante, fetchProveedor, countProveedor, nor
 import { sincronizarTodo } from './services/secopSync.js';
 import { initBigQuery, queryBQ, querySecopBQ, resumenEntidadBQ, DATASET_ID } from './services/bigquery.js';
 import { indexarContratosEnRAG } from './services/bqRagIndexer.js';
-import { kpisComparativos, serieMensual, tiposContrato, modalidades, topContratistas, prestacionServicios, heatmapMensual, alertasRiesgo, topContratosValor } from './services/analytics.js';
+import { kpisComparativos, serieMensual, tiposContrato, modalidades, topContratistas, prestacionServicios, heatmapMensual, alertasRiesgo, topContratosValor, prestacionServiciosDetalle, directosNoPrestacion } from './services/analytics.js';
 
 
 
@@ -2354,6 +2354,18 @@ app.get('/api/analytics/alertas/:entidadId', checkUser, async (req, res) => {
 app.get('/api/analytics/top-contratos/:entidadId', checkUser, async (req, res) => {
   try { res.json(await topContratosValor(req.params.entidadId)); }
   catch (e) { console.error('[analytics/top-contratos]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/analytics/prestacion-detalle/:entidadId — análisis profundo PS directa */
+app.get('/api/analytics/prestacion-detalle/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await prestacionServiciosDetalle(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/prestacion-detalle]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/analytics/directos-no-ps/:entidadId — contratos directos NO prestación de servicios */
+app.get('/api/analytics/directos-no-ps/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await directosNoPrestacion(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/directos-no-ps]', e.message); res.status(500).json({ error: e.message }); }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

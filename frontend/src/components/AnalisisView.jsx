@@ -412,6 +412,10 @@ export default function AnalisisView() {
   const [heatmap, setHeatmap] = useState([]);
   const [alertas, setAlertas] = useState([]);
   const [topContratos, setTopContratos] = useState([]);
+  const [psDetalle, setPsDetalle] = useState(null);
+  const [directosNPS, setDirectosNPS] = useState(null);
+  const [loadingPS, setLoadingPS] = useState(false);
+  const [loadingNPS, setLoadingNPS] = useState(false);
 
   // Sort state for contratistas table
   const [sortField, setSortField] = useState('valor_total');
@@ -871,6 +875,8 @@ export default function AnalisisView() {
             { id: 'resumen',  label: '📋 Resumen Ejecutivo' },
             { id: 'profundo', label: '🔬 Análisis Profundo' },
             { id: 'alertas',  label: '🚨 Alertas de Riesgo' },
+            { id: 'prestacion_detalle', label: '🧑‍💼 Prestación de Servicios' },
+            { id: 'directos_nops', label: '📑 Directos No-PS' },
           ].map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               style={{
@@ -1207,6 +1213,326 @@ export default function AnalisisView() {
             )}
           </div>
         )}
+
+        {/* ══════════════ TAB: PRESTACIÓN DE SERVICIOS DETALLADA ══════════════ */}
+        {activeTab === 'prestacion_detalle' && (
+          <div id="section-ps-detalle">
+            {/* Botón cargar */}
+            {!psDetalle && !loadingPS && (
+              <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>🧑‍💼</div>
+                <h3 style={{ color: '#15234E', marginBottom: 8 }}>Análisis Prestación de Servicios Directa</h3>
+                <p style={{ color: '#6B7280', marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
+                  Comparativo Duque vs Petro por año, personas repetidas entre entidades, contratistas activos en 2026 y top ganadores.
+                </p>
+                <button onClick={async () => {
+                  setLoadingPS(true);
+                  try {
+                    const token = await currentUser.getIdToken();
+                    const r = await fetch(`/api/analytics/prestacion-detalle/${entidadId}`, { headers: { Authorization: `Bearer ${token}` } });
+                    const d = await r.json();
+                    setPsDetalle(d);
+                  } catch(e) { console.error(e); }
+                  setLoadingPS(false);
+                }} style={{ background: '#214E92', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 32px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                  📊 Cargar Análisis
+                </button>
+              </div>
+            )}
+            {loadingPS && <div style={{ textAlign:'center', padding: 80 }}><Skeleton h={60} /><Skeleton h={60} /><Skeleton h={60} /></div>}
+            {psDetalle && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+                {/* 1. Comparativo anual Duque vs Petro */}
+                <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+                  <h3 style={{ color: '#15234E', marginBottom: 4 }}>📅 Contratos por Año — Duque vs Petro</h3>
+                  <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 16 }}>Último año Duque (2021-2022) y cada año de Petro. Cantidad de contratos, valores y personas únicas.</p>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: '#F8FAFC' }}>
+                          {['Año','Gobierno','Contratos','Valor Total','Personas Únicas','Valor Promedio'].map(h => (
+                            <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #E8ECF4', fontWeight: 700, color: '#374151' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {psDetalle.porAnio.map((r, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #F3F4F6', background: i%2===0?'#fff':'#FAFBFC' }}>
+                            <td style={{ padding: '10px 12px', fontWeight: 700 }}>{r.anio}</td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span style={{ background: r.gobierno==='Duque'?'#214E92':'#0D7C3D', color:'#fff', borderRadius:6, padding:'2px 10px', fontSize:12, fontWeight:700 }}>{r.gobierno}</span>
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>{Number(r.n_contratos).toLocaleString('es-CO')}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:700, color:'#15234E' }}>{COP(r.valor_total)}</td>
+                            <td style={{ padding: '10px 12px' }}>{Number(r.personas_unicas).toLocaleString('es-CO')}</td>
+                            <td style={{ padding: '10px 12px' }}>{COP(r.valor_promedio)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* 2. Personas que se repiten entre entidades */}
+                <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+                  <h3 style={{ color: '#C0392B', marginBottom: 4 }}>🔄 Personas Repetidas Entre Entidades (Petro)</h3>
+                  <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 16 }}>Contratistas que tienen contratos de prestación de servicios en más de una entidad del sector MinTIC durante el gobierno Petro. Alta concentración puede indicar nómina paralela coordinada.</p>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: '#FEF2F2' }}>
+                          {['#','Nombre','NIT/Doc','Entidades','Contratos','Valor Total','Entidades Detalle'].map(h => (
+                            <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #FECACA', fontWeight: 700, color: '#991B1B' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {psDetalle.repetidos.slice(0,50).map((r, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #FEF2F2', background: i%2===0?'#fff':'#FFFBFB' }}>
+                            <td style={{ padding: '10px 12px', color:'#9CA3AF' }}>{i+1}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:700, maxWidth:180 }}>{r.nombre}</td>
+                            <td style={{ padding: '10px 12px', fontFamily:'monospace', fontSize:12, color:'#6B7280' }}>{r.documento_proveedor}</td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span style={{ background: r.n_entidades>=3?'#C0392B':'#E67E22', color:'#fff', borderRadius:6, padding:'2px 8px', fontWeight:700, fontSize:12 }}>{r.n_entidades}</span>
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>{r.n_contratos}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:700, color:'#C0392B' }}>{COP(r.valor_total)}</td>
+                            <td style={{ padding: '10px 12px', fontSize:11, color:'#6B7280', maxWidth:200 }}>{r.entidades}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8 }}>Mostrando {Math.min(50, psDetalle.repetidos.length)} de {psDetalle.repetidos.length} personas repetidas</p>
+                  </div>
+                </div>
+
+                {/* 3. Contratistas Duque que continúan en 2026 */}
+                <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+                  <h3 style={{ color: '#214E92', marginBottom: 4 }}>🔁 Contratistas Duque que Continúan en 2026</h3>
+                  <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 16 }}>Personas que tuvieron contratos de PS en el gobierno Duque y siguen con contratos activos en 2026. Total: <strong style={{color:'#214E92'}}>{psDetalle.continuanDuque.length} personas</strong>.</p>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: '#EBF1FB' }}>
+                          {['#','Nombre','Doc','Contratos Duque','Valor en Duque','Última Firma Duque','Estado'].map(h => (
+                            <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #BFDBFE', fontWeight: 700, color: '#1E40AF' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {psDetalle.continuanDuque.map((r, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #EFF6FF', background: i%2===0?'#fff':'#F8FAFF' }}>
+                            <td style={{ padding: '10px 12px', color:'#9CA3AF' }}>{i+1}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:700 }}>{r.nombre}</td>
+                            <td style={{ padding: '10px 12px', fontFamily:'monospace', fontSize:12, color:'#6B7280' }}>{r.documento_proveedor}</td>
+                            <td style={{ padding: '10px 12px' }}>{r.n_contratos_duque}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:700, color:'#214E92' }}>{COP(r.valor_duque)}</td>
+                            <td style={{ padding: '10px 12px' }}>{r.ultima_firma_duque}</td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span style={{ background: '#DCFCE7', color:'#15803D', borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:600 }}>{r.estado_contrato || 'Activo'}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* 4. Top ganadores Petro + totales */}
+                <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+                  <h3 style={{ color: '#0D7C3D', marginBottom: 4 }}>💰 Top 50 Mayores Ganadores — Gobierno Petro</h3>
+                  <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 8 }}>Personas con mayor valor acumulado en contratos de PS durante el gobierno Petro.</p>
+                  {/* Totales por año */}
+                  <div style={{ display:'flex', gap:12, marginBottom:16, flexWrap:'wrap' }}>
+                    {psDetalle.totalPetro.map((t,i) => (
+                      <div key={i} style={{ background:'#E8F7EE', borderRadius:10, padding:'10px 18px', border:'1px solid #BBF7D0' }}>
+                        <div style={{ fontSize:12, color:'#6B7280' }}>Año {t.anio}</div>
+                        <div style={{ fontWeight:800, fontSize:15, color:'#0D7C3D' }}>{COP(t.valor_total)}</div>
+                        <div style={{ fontSize:11, color:'#9CA3AF' }}>{Number(t.n_contratos).toLocaleString('es-CO')} contratos · {Number(t.personas).toLocaleString('es-CO')} personas</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: '#F0FDF4' }}>
+                          {['#','Nombre','Doc','Contratos','Valor Total','Promedio/Contrato','Años','Entidades'].map(h => (
+                            <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #BBF7D0', fontWeight: 700, color: '#14532D' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {psDetalle.topGanadores.map((r, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #F0FDF4', background: i<3?'#FFFBEB':i%2===0?'#fff':'#F8FFF9' }}>
+                            <td style={{ padding: '10px 12px', fontWeight:800, color: i<3?'#D97706':'#9CA3AF' }}>{i+1}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:700 }}>{r.nombre}</td>
+                            <td style={{ padding: '10px 12px', fontFamily:'monospace', fontSize:12, color:'#6B7280' }}>{r.documento_proveedor}</td>
+                            <td style={{ padding: '10px 12px' }}>{r.n_contratos}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:800, color:'#0D7C3D' }}>{COP(r.valor_total)}</td>
+                            <td style={{ padding: '10px 12px' }}>{COP(r.valor_promedio)}</td>
+                            <td style={{ padding: '10px 12px', fontSize:12 }}>{r.primer_anio}–{r.ultimo_anio}</td>
+                            <td style={{ padding: '10px 12px' }}>{r.n_entidades}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════════ TAB: DIRECTOS NO PRESTACIÓN DE SERVICIOS ══════════════ */}
+        {activeTab === 'directos_nops' && (
+          <div id="section-directos-nops">
+            {!directosNPS && !loadingNPS && (
+              <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>📑</div>
+                <h3 style={{ color: '#15234E', marginBottom: 8 }}>Contratos Directos — Excluye Prestación de Servicios</h3>
+                <p style={{ color: '#6B7280', marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
+                  Análisis completo de contratos adjudicados por contratación directa que NO son prestación de servicios: suministros, obras, consultorías, arrendamientos, etc.
+                </p>
+                <button onClick={async () => {
+                  setLoadingNPS(true);
+                  try {
+                    const token = await currentUser.getIdToken();
+                    const r = await fetch(`/api/analytics/directos-no-ps/${entidadId}`, { headers: { Authorization: `Bearer ${token}` } });
+                    const d = await r.json();
+                    setDirectosNPS(d);
+                  } catch(e) { console.error(e); }
+                  setLoadingNPS(false);
+                }} style={{ background: '#7B2D8B', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 32px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                  📊 Cargar Análisis
+                </button>
+              </div>
+            )}
+            {loadingNPS && <div style={{ textAlign:'center', padding: 80 }}><Skeleton h={60} /><Skeleton h={60} /><Skeleton h={60} /></div>}
+            {directosNPS && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+                {/* KPI Duque vs Petro */}
+                {directosNPS.kpis && (
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                    {[
+                      { label:'Contratos Duque', val: Number(directosNPS.kpis.duque_n||0).toLocaleString('es-CO'), color:'#214E92', icon:'📄' },
+                      { label:'Valor Duque', val: COP(directosNPS.kpis.duque_valor), color:'#214E92', icon:'💰' },
+                      { label:'Proveedores Duque', val: Number(directosNPS.kpis.duque_proveedores||0).toLocaleString('es-CO'), color:'#214E92', icon:'🏢' },
+                      { label:'Contratos Petro', val: Number(directosNPS.kpis.petro_n||0).toLocaleString('es-CO'), color:'#0D7C3D', icon:'📄' },
+                      { label:'Valor Petro', val: COP(directosNPS.kpis.petro_valor), color:'#0D7C3D', icon:'💰' },
+                      { label:'Proveedores Petro', val: Number(directosNPS.kpis.petro_proveedores||0).toLocaleString('es-CO'), color:'#0D7C3D', icon:'🏢' },
+                    ].map((k,i) => (
+                      <div key={i} style={{ background:'#fff', borderRadius:12, padding:18, borderLeft:`4px solid ${k.color}`, boxShadow:'0 2px 8px rgba(0,0,0,0.06)' }}>
+                        <div style={{ fontSize:22, marginBottom:6 }}>{k.icon}</div>
+                        <div style={{ fontSize:11, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em' }}>{k.label}</div>
+                        <div style={{ fontSize:18, fontWeight:800, color:k.color, marginTop:4 }}>{k.val}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Top tipos de contrato */}
+                <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+                  <h3 style={{ color: '#15234E', marginBottom: 16 }}>📋 Tipos de Contrato Más Usados (Directa No-PS)</h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: '#F8FAFC' }}>
+                          {['Tipo de Contrato','Gobierno','Contratos','Valor Total','Valor Promedio'].map(h => (
+                            <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #E8ECF4', fontWeight: 700, color: '#374151' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {directosNPS.porTipo.map((r, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #F3F4F6', background: i%2===0?'#fff':'#FAFBFC' }}>
+                            <td style={{ padding: '10px 12px', fontWeight:600, maxWidth:250 }}>{r.tipo_de_contrato || '(Sin tipo)'}</td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span style={{ background: r.gobierno==='Duque'?'#214E92':'#0D7C3D', color:'#fff', borderRadius:6, padding:'2px 10px', fontSize:12, fontWeight:700 }}>{r.gobierno}</span>
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>{Number(r.n_contratos).toLocaleString('es-CO')}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:700, color:'#15234E' }}>{COP(r.valor_total)}</td>
+                            <td style={{ padding: '10px 12px' }}>{COP(r.valor_promedio)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Top proveedores Petro */}
+                <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+                  <h3 style={{ color: '#7B2D8B', marginBottom: 16 }}>🏆 Top 50 Proveedores Directos No-PS — Gobierno Petro</h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: '#FAF0FF' }}>
+                          {['#','Proveedor','NIT','Tipo Principal','Contratos','Valor Total','Tipos','Entidades'].map(h => (
+                            <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #E9D5FF', fontWeight: 700, color: '#581C87' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {directosNPS.topProveedores.map((r, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #FAF0FF', background: i<3?'#FFF7FF':i%2===0?'#fff':'#FDFAFF' }}>
+                            <td style={{ padding: '10px 12px', fontWeight:800, color: i<3?'#D97706':'#9CA3AF' }}>{i+1}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:700, maxWidth:180 }}>{r.nombre}</td>
+                            <td style={{ padding: '10px 12px', fontFamily:'monospace', fontSize:12, color:'#6B7280' }}>{r.documento_proveedor}</td>
+                            <td style={{ padding: '10px 12px', fontSize:12 }}>{r.tipo_principal}</td>
+                            <td style={{ padding: '10px 12px' }}>{r.n_contratos}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:800, color:'#7B2D8B' }}>{COP(r.valor_total)}</td>
+                            <td style={{ padding: '10px 12px' }}>{r.tipos_distintos}</td>
+                            <td style={{ padding: '10px 12px' }}>{r.n_entidades}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Top 30 contratos de mayor valor */}
+                <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+                  <h3 style={{ color: '#C0392B', marginBottom: 16 }}>🔍 Top 30 Contratos de Mayor Valor — Directa No-PS</h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: '#FEF2F2' }}>
+                          {['Gobierno','Proveedor','Tipo','Objeto','Valor','Fecha','Estado','SECOP'].map(h => (
+                            <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #FECACA', fontWeight: 700, color: '#991B1B' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {directosNPS.topContratos.map((r, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #FEF2F2', background: i%2===0?'#fff':'#FFFBFB' }}>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span style={{ background: r.gobierno==='Duque'?'#214E92':'#0D7C3D', color:'#fff', borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:700 }}>{r.gobierno}</span>
+                            </td>
+                            <td style={{ padding: '10px 12px', fontWeight:600, maxWidth:150 }}>{r.proveedor_adjudicado}</td>
+                            <td style={{ padding: '10px 12px', fontSize:12 }}>{r.tipo_de_contrato}</td>
+                            <td style={{ padding: '10px 12px', fontSize:12, maxWidth:200, color:'#6B7280' }}>{(r.objeto_del_contrato||'').slice(0,80)}{(r.objeto_del_contrato||'').length>80?'…':''}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:800, color:'#C0392B' }}>{COP(r.valor_del_contrato)}</td>
+                            <td style={{ padding: '10px 12px', fontSize:12 }}>{r.fecha_de_firma}</td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span style={{ background:'#F0FDF4', color:'#15803D', borderRadius:6, padding:'2px 8px', fontSize:11 }}>{r.estado_contrato}</span>
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>
+                              {r.url_secop && <a href={r.url_secop} target="_blank" rel="noopener noreferrer" style={{ color:'#3B82F6', fontSize:12 }}>🔗 Ver</a>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
 
       {/* CSS animations */}
