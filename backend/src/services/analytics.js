@@ -389,21 +389,25 @@ export async function prestacionServiciosDetalle(entidadId) {
     ORDER BY anio
   `;
 
-  // 2. Personas que se repiten en múltiples entidades (gobierno Petro)
+  // 2. Personas que se repiten en múltiples entidades MinTIC (gobierno Petro)
+  // Usamos UNNEST(entidades_mintic) para obtener la entidad de cada contrato
+  const ENTIDADES_MINTIC = "('mintic','ane','crc','and','futic','rtvc','472')";
   const sqlRepetidos = `
     SELECT
-      documento_proveedor,
-      MAX(proveedor_adjudicado) AS nombre,
-      COUNT(DISTINCT entidad_contratante) AS n_entidades,
+      t.documento_proveedor,
+      MAX(t.proveedor_adjudicado) AS nombre,
+      COUNT(DISTINCT ent) AS n_entidades,
       COUNT(*) AS n_contratos,
-      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
-      STRING_AGG(DISTINCT entidad_contratante ORDER BY entidad_contratante LIMIT 10) AS entidades
-    FROM ${TABLE}
+      SUM(SAFE_CAST(t.valor_del_contrato AS FLOAT64)) AS valor_total,
+      STRING_AGG(DISTINCT ent ORDER BY ent LIMIT 10) AS entidades
+    FROM ${TABLE} t, UNNEST(t.entidades_mintic) AS ent
     WHERE ${PS_FILTER}
-      AND fecha_de_firma >= '${PETRO_DESDE}'
-      AND documento_proveedor IS NOT NULL
-    GROUP BY documento_proveedor
-    HAVING COUNT(DISTINCT entidad_contratante) > 1
+      AND t.fecha_de_firma >= '${PETRO_DESDE}'
+      AND t.documento_proveedor IS NOT NULL
+      AND 'contratante' IN UNNEST(t.roles_mintic)
+      AND ent IN ${ENTIDADES_MINTIC}
+    GROUP BY t.documento_proveedor
+    HAVING COUNT(DISTINCT ent) > 1
     ORDER BY valor_total DESC
     LIMIT 100
   `;
@@ -440,7 +444,7 @@ export async function prestacionServiciosDetalle(entidadId) {
       AVG(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_promedio,
       MIN(EXTRACT(YEAR FROM fecha_de_firma)) AS primer_anio,
       MAX(EXTRACT(YEAR FROM fecha_de_firma)) AS ultimo_anio,
-      COUNT(DISTINCT entidad_contratante) AS n_entidades
+      1 AS n_entidades
     FROM ${TABLE}
     WHERE ${f} AND ${PS_FILTER}
       AND fecha_de_firma >= '${PETRO_DESDE}'
@@ -522,7 +526,7 @@ export async function directosNoPrestacion(entidadId) {
       COUNT(*) AS n_contratos,
       SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
       COUNT(DISTINCT tipo_de_contrato) AS tipos_distintos,
-      COUNT(DISTINCT entidad_contratante) AS n_entidades
+      1 AS n_entidades
     FROM ${TABLE}
     WHERE ${f} AND ${NPS_FILTER}
       AND fecha_de_firma >= '${PETRO_DESDE}'
