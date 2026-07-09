@@ -1289,10 +1289,16 @@ export default function AnalisisView() {
                   try {
                     const token = await currentUser.getIdToken();
                     const r = await fetch(`/api/analytics/prestacion-detalle/${entidadId}`, { headers: { Authorization: `Bearer ${token}` } });
+                    if (!r.ok) throw new Error(`Error ${r.status}: ${r.statusText}`);
                     const d = await r.json();
+                    if (d.error) throw new Error(d.error);
                     setPsDetalle(d);
-                  } catch(e) { console.error(e); }
-                  setLoadingPS(false);
+                  } catch(e) {
+                    console.error('[PS-Detalle]', e);
+                    alert('Error cargando Prestación de Servicios:\n' + e.message);
+                  } finally {
+                    setLoadingPS(false);
+                  }
                 }} style={{ background: '#214E92', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 32px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
                   📊 Cargar Análisis
                 </button>
@@ -1459,10 +1465,16 @@ export default function AnalisisView() {
                   try {
                     const token = await currentUser.getIdToken();
                     const r = await fetch(`/api/analytics/directos-no-ps/${entidadId}`, { headers: { Authorization: `Bearer ${token}` } });
+                    if (!r.ok) throw new Error(`Error ${r.status}: ${r.statusText}`);
                     const d = await r.json();
+                    if (d.error) throw new Error(d.error);
                     setDirectosNPS(d);
-                  } catch(e) { console.error(e); }
-                  setLoadingNPS(false);
+                  } catch(e) {
+                    console.error('[Directos-NPS]', e);
+                    alert('Error cargando Directos No-PS:\n' + e.message);
+                  } finally {
+                    setLoadingNPS(false);
+                  }
                 }} style={{ background: '#7B2D8B', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 32px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
                   📊 Cargar Análisis
                 </button>

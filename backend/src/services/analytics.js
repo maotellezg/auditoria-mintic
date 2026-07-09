@@ -391,7 +391,7 @@ export async function prestacionServiciosDetalle(entidadId) {
 
   // 2. Personas que se repiten en múltiples entidades MinTIC (gobierno Petro)
   // Usamos UNNEST(entidades_mintic) para obtener la entidad de cada contrato
-  const ENTIDADES_MINTIC = "('mintic','ane','crc','and','futic','rtvc','472')";
+  const ENTIDADES_MINTIC = "('mintic','ane','crc','and','futic','rtvc','472','cpe')";
   const sqlRepetidos = `
     SELECT
       t.documento_proveedor,
