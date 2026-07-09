@@ -45,7 +45,7 @@ export default function Auth() {
 
   return (
     <div className="auth-wrapper">
-      <div className="auth-card">
+      <div className="auth-card glass-panel">
         <div className="auth-header">
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
             <div className="dropzone-icon">
@@ -54,12 +54,11 @@ export default function Auth() {
             </div>
           </div>
           <h2>
-            {mode === 'login' && 'Herramienta de Análisis'}
+            {mode === 'login' && 'Auditoria MinTic'}
             {mode === 'forgot' && 'Recuperar Contraseña'}
           </h2>
-          {mode === 'login' && <p style={{ color: 'var(--color-orange)', fontWeight: 600, fontSize: '0.8rem', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '4px' }}>Datos Sector Público · MinTIC</p>}
           <p>
-            {mode === 'login' && 'Ingresa tus credenciales para continuar.'}
+            {mode === 'login' && 'Ingresa tus credenciales para acceder a la herramienta.'}
             {mode === 'forgot' && 'Ingresa tu correo para recibir las instrucciones.'}
           </p>
         </div>
