@@ -24,6 +24,7 @@ const ENTIDADES = [
   { id: 'futic',  nombre: 'FUTIC',  color: '#C0392B', nit: '8001316486', icono: '💰' },
   { id: 'rtvc',   nombre: 'RTVC',   color: '#E67E22', nit: '900002583', icono: '📺' },
   { id: '472',    nombre: '4-72',   color: '#16A085', nit: '900062917', icono: '📮' },
+  { id: 'cpe',    nombre: 'CPE',    color: '#1565C0', nit: '830079479', icono: '💻' },
 ];
 
 const DUQUE_COLOR = '#214E92';

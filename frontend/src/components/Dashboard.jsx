@@ -357,6 +357,7 @@ export default function Dashboard({ onSelectDoc }) {
   const entidadesMinTic = [
     'MinTIC', 'ANE', 'CRC', 'AND', 'FUTIC',
     'RTVC', 'Servicios Postales Nacionales (4-72)',
+    'Computadores para Educar',
     'Persona Natural', 'Empresa Privada', 'Otro'
   ];
 

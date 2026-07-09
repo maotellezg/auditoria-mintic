@@ -19,7 +19,7 @@ const DATASET    = 'secop_mintic';
 const bq         = new BigQuery({ projectId: PROJECT_ID });
 
 // Entidades del sector TIC
-const ENTIDADES = ['mintic','ane','crc','and','futic','rtvc','472'];
+const ENTIDADES = ['mintic','ane','crc','and','futic','rtvc','472','cpe'];
 
 const DUQUE_DESDE = '2018-08-07';
 const DUQUE_HASTA = '2022-08-06';

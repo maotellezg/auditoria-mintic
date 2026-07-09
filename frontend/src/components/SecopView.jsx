@@ -11,6 +11,7 @@ const ENTIDADES = [
   { id: 'futic',  nombre: 'FUTIC',   color: '#C0392B', bg: '#FDECEA', icono: '💰', nit: '8001316486', desc: 'Fondo Único TIC' },
   { id: 'rtvc',   nombre: 'RTVC',    color: '#E67E22', bg: '#FEF5EC', icono: '📺', nit: '900002583', desc: 'Sistema de Medios Públicos' },
   { id: '472',    nombre: '4-72',    color: '#16A085', bg: '#E8F8F5', icono: '📮', nit: '900062917', desc: 'Servicios Postales Nacionales' },
+  { id: 'cpe',    nombre: 'CPE',     color: '#1565C0', bg: '#E3F2FD', icono: '💻', nit: '830079479', desc: 'Computadores para Educar' },
 ];
 
 const FUENTES = [

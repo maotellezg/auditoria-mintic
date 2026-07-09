@@ -8,6 +8,7 @@
  * Entidades MinTic (NITs sin puntos ni guión):
  *   MinTIC  899999053  |  ANE  900334265  |  CRC  830002593
  *   AND     901144049  |  FUTIC 8001316486 |  RTVC 900002583  |  4-72  900062917
+ *   CPE     830079479  (Computadores para Educar)
  */
 
 const FECHA_MINIMA = '2018-08-07T00:00:00.000';
@@ -143,6 +144,12 @@ export const ENTIDADES_MINTIC = [
     nombreCompleto: 'Servicios Postales Nacionales (4-72)',
     nombreCorto: 'SERVICIOS POSTALES NACIONALES',
     icono: '📮'
+  },
+  {
+    id: 'cpe', nombre: 'CPE', nit: '830079479', color: '#1565C0',
+    nombreCompleto: 'Computadores para Educar',
+    nombreCorto: 'COMPUTADORES PARA EDUCAR',
+    icono: '💻'
   }
 ];
 
