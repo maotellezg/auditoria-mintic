@@ -400,7 +400,7 @@ export default function AnalisisView() {
   const { currentUser } = useAuth();
   const [entidadId, setEntidadId] = useState('mintic');
   const [activeTab, setActiveTab] = useState('resumen');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState('');
 
   // Data states
@@ -427,8 +427,12 @@ export default function AnalisisView() {
 
   // ─── Fetch data ─────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async (eid) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setError(null);
     setKpis(null);
     setSerie([]); setTipos([]); setMods([]); setContratistas([]);
     setPrestacion([]); setHeatmap([]); setAlertas([]); setTopContratos([]);
@@ -438,11 +442,13 @@ export default function AnalisisView() {
       const headers = { Authorization: `Bearer ${token}` };
 
       // Wrap each fetch so a single failure doesn't kill all data
-      const safeJson = async (url, hdrs) => {
+      const safeJson = async (url) => {
         try {
-          const r = await fetch(url, { headers: hdrs });
+          const r = await fetch(url, { headers });
           if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
-          return await r.json();
+          const data = await r.json();
+          if (data && data.error) throw new Error(data.error);
+          return data;
         } catch (e) {
           console.warn('[AnalisisView] fetch failed:', url, e.message);
           return null;
@@ -451,15 +457,15 @@ export default function AnalisisView() {
 
       const [kpisR, serieR, tiposR, modsR, contratistasR, prestacionR, heatmapR, alertasR, topR] =
         await Promise.all([
-          safeJson(`/api/analytics/kpis/${eid}`, headers),
-          safeJson(`/api/analytics/serie-mensual/${eid}`, headers),
-          safeJson(`/api/analytics/tipos/${eid}`, headers),
-          safeJson(`/api/analytics/modalidades/${eid}`, headers),
-          safeJson(`/api/analytics/top-contratistas/${eid}`, headers),
-          safeJson(`/api/analytics/prestacion-servicios/${eid}`, headers),
-          safeJson(`/api/analytics/heatmap/${eid}`, headers),
-          safeJson(`/api/analytics/alertas/${eid}`, headers),
-          safeJson(`/api/analytics/top-contratos/${eid}`, headers),
+          safeJson(`/api/analytics/kpis/${eid}`),
+          safeJson(`/api/analytics/serie-mensual/${eid}`),
+          safeJson(`/api/analytics/tipos/${eid}`),
+          safeJson(`/api/analytics/modalidades/${eid}`),
+          safeJson(`/api/analytics/top-contratistas/${eid}`),
+          safeJson(`/api/analytics/prestacion-servicios/${eid}`),
+          safeJson(`/api/analytics/heatmap/${eid}`),
+          safeJson(`/api/analytics/alertas/${eid}`),
+          safeJson(`/api/analytics/top-contratos/${eid}`),
         ]);
 
       setKpis(kpisR ? (Array.isArray(kpisR) ? kpisR[0] : kpisR) : null);
@@ -472,8 +478,7 @@ export default function AnalisisView() {
       setAlertas(Array.isArray(alertasR) ? alertasR : []);
       setTopContratos(Array.isArray(topR) ? topR : []);
 
-      // Surface a top-level error only if kpis is null (core data failed)
-      if (!kpisR) setError('No se pudieron cargar los KPIs desde el backend. Revisa la consola para detalles.');
+      if (!kpisR) setError('El backend no devolvió KPIs. Verifica que BigQuery tenga datos para esta entidad.');
       else setError(null);
     } catch (err) {
       console.error('[AnalisisView] fetch error:', err);
@@ -483,7 +488,11 @@ export default function AnalisisView() {
     }
   }, [currentUser]);
 
-  useEffect(() => { fetchAll(entidadId); }, [entidadId, fetchAll]);
+  // Re-fetch when entity changes OR when currentUser becomes available
+  useEffect(() => {
+    if (currentUser) fetchAll(entidadId);
+    else setLoading(false);
+  }, [entidadId, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Derived data for charts ─────────────────────────────────────────────
   const serieFormatted = (() => {
