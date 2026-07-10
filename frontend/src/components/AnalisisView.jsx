@@ -42,18 +42,42 @@ class ErrorBoundary extends React.Component {
 }
 
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
-const ENTIDADES = [
-  { id: 'sector', nombre: 'SECTOR COMPLETO', color: '#15234E', nit: 'TODAS', icono: '🏅' },
-  { id: 'mintic', nombre: 'MinTIC', color: '#FF6900', nit: '899999053', icono: '🏗️' },
-  { id: 'ane',    nombre: 'ANE',    color: '#214E92', nit: '900334265', icono: '📡' },
-  { id: 'crc',    nombre: 'CRC',    color: '#0D7C3D', nit: '830002593', icono: '⚖️' },
-  { id: 'and',    nombre: 'AND',    color: '#7B2D8B', nit: '901144049', icono: '💻' },
-  { id: 'futic',  nombre: 'FUTIC',  color: '#C0392B', nit: '8001316486', icono: '💰' },
-  { id: 'rtvc',   nombre: 'RTVC',   color: '#E67E22', nit: '900002583', icono: '📺' },
-  { id: '472',    nombre: '4-72',   color: '#16A085', nit: '900062917', icono: '📮' },
-  { id: 'cpe',    nombre: 'CPE',    color: '#1565C0', nit: '830079479', icono: '💻' },
-];
+// ─── Config por sector ────────────────────────────────────────────────────────
+const SECTOR_CONFIG = {
+  tic: {
+    nombre: 'SECTOR ADMINISTRATIVO DE TECNOLOGÍAS DE LA INFORMACIÓN Y LAS COMUNICACIONES',
+    icono: '📊',
+    color: '#15234E',
+    defaultEntidad: 'sector',
+    entidades: [
+      { id: 'sector', nombre: 'SECTOR COMPLETO', color: '#15234E', nit: 'TODAS', icono: '🏅' },
+      { id: 'mintic', nombre: 'MinTIC',  color: '#FF6900', nit: '899999053',  icono: '🏗️' },
+      { id: 'ane',    nombre: 'ANE',     color: '#214E92', nit: '900334265',  icono: '📡' },
+      { id: 'crc',    nombre: 'CRC',     color: '#0D7C3D', nit: '830002593',  icono: '⚖️' },
+      { id: 'and',    nombre: 'AND',     color: '#7B2D8B', nit: '901144049',  icono: '💻' },
+      { id: 'futic',  nombre: 'FUTIC',   color: '#C0392B', nit: '8001316486', icono: '💰' },
+      { id: 'rtvc',   nombre: 'RTVC',    color: '#E67E22', nit: '900002583',  icono: '📺' },
+      { id: '472',    nombre: '4-72',    color: '#16A085', nit: '900062917',  icono: '📮' },
+      { id: 'cpe',    nombre: 'CPE',     color: '#1565C0', nit: '830079479',  icono: '💻' },
+    ],
+  },
+  ambiente: {
+    nombre: 'SECTOR AMBIENTE Y DESARROLLO SOSTENIBLE',
+    icono: '🌿',
+    color: '#166534',
+    defaultEntidad: 'sector_ambiente',
+    entidades: [
+      { id: 'sector_ambiente', nombre: 'SECTOR COMPLETO', color: '#166534', nit: 'TODAS', icono: '🏅' },
+      { id: 'sector_ambiente_mads',  nombre: 'Min. Ambiente',  color: '#15803D', nit: '830115395', icono: '🌿' },
+      { id: 'sector_ambiente_anla',  nombre: 'ANLA',           color: '#0E7490', nit: '900467239', icono: '📜' },
+      { id: 'sector_ambiente_fonam', nombre: 'FONAM',          color: '#7C3AED', nit: '830025267', icono: '💰' },
+    ],
+  },
+};
+
+// Backward compat: ENTIDADES array para sector TIC
+const ENTIDADES = SECTOR_CONFIG.tic.entidades;
+
 
 const DUQUE_COLOR = '#214E92';
 const PETRO_COLOR = '#0D7C3D';
@@ -534,9 +558,10 @@ function TablaRepetidos({ rows = [] }) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-function AnalisisViewInner() {
+function AnalisisViewInner({ sector = 'tic' }) {
+  const cfg = SECTOR_CONFIG[sector] || SECTOR_CONFIG.tic;
   const { currentUser } = useAuth();
-  const [entidadId, setEntidadId] = useState('sector');
+  const [entidadId, setEntidadId] = useState(cfg.defaultEntidad);
   const [activeTab, setActiveTab] = useState('resumen');
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState('');
@@ -578,7 +603,7 @@ function AnalisisViewInner() {
   const [sortField, setSortField] = useState('valor_total');
   const [sortDir, setSortDir] = useState('desc');
 
-  const entidadActiva = ENTIDADES.find(e => e.id === entidadId) || ENTIDADES[0];
+  const entidadActiva = cfg.entidades.find(e => e.id === entidadId) || cfg.entidades[0];
 
   // ─── Fetch data ─────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async (eid) => {
@@ -991,7 +1016,7 @@ function AnalisisViewInner() {
       }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#15234E', lineHeight: 1.3 }}>
-            📊 ANÁLISIS SECTOR ADMINISTRATIVO DE TECNOLOGÍAS DE LA INFORMACIÓN Y LAS COMUNICACIONES
+            {cfg.icono} ANÁLISIS {cfg.nombre}
           </h1>
           <p style={{ margin: 0, fontSize: 12, color: '#6B7280', marginTop: 2 }}>
             Comparativo Duque vs Petro — Detección de corrupción por análisis estadístico de contratación pública
@@ -1029,7 +1054,7 @@ function AnalisisViewInner() {
       <div style={{ padding: '20px 28px 0' }}>
         {/* ── Entity selector ── */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-          {ENTIDADES.map(e => (
+          {cfg.entidades.map(e => (
             <button key={e.id} onClick={() => setEntidadId(e.id)}
               style={{
                 padding: '8px 18px', borderRadius: 30, border: 'none',
@@ -1750,10 +1775,10 @@ function AnalisisViewInner() {
 }
 
 // ─── Export envuelto en ErrorBoundary ─────────────────────────────────────────
-export default function AnalisisView() {
+export default function AnalisisView({ sector }) {
   return (
     <ErrorBoundary>
-      <AnalisisViewInner />
+      <AnalisisViewInner sector={sector || 'tic'} />
     </ErrorBoundary>
   );
 }

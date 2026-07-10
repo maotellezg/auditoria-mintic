@@ -207,6 +207,10 @@ function AppContent() {
         return <BigQueryView />;
       case 'analisis':
         return <AnalisisView />;
+      case 'secop_ambiente':
+        return <SecopView sector="ambiente" />;
+      case 'analisis_ambiente':
+        return <AnalisisView sector="ambiente" />;
       case 'configuracion':
         return userRole === 'administrador' ? (
           <SettingsView />

@@ -86,6 +86,30 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword 
           </div>
         </li>
 
+        {/* ── Sector Ambiente ── */}
+        <li style={{ padding: '12px 16px 4px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Sector Ambiente
+        </li>
+
+        <li>
+          <div
+            className={`sidebar-link ${activeTab === 'secop_ambiente' ? 'active' : ''}`}
+            onClick={() => setActiveTab('secop_ambiente')}
+          >
+            <Building2 size={20} />
+            <span>🌿 Sector Ambiente — SECOP</span>
+          </div>
+        </li>
+
+        <li>
+          <div
+            className={`sidebar-link ${activeTab === 'analisis_ambiente' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analisis_ambiente')}
+          >
+            <BarChart2 size={20} />
+            <span>📊 Análisis Sector Ambiente</span>
+          </div>
+        </li>
 
         <li>
           <div 

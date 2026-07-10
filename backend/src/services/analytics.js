@@ -54,10 +54,22 @@ async function runQuery(sql) {
 // Filtro base para entidad como contratante
 // Caso especial: 'sector' = todas las entidades del sector TIC
 const ENTIDADES_IDS = "('mintic','ane','crc','and','futic','rtvc','472','cpe')";
-const baseFilter = (entidadId) =>
-  entidadId === 'sector'
-    ? `EXISTS(SELECT 1 FROM UNNEST(entidades_mintic) AS _e WHERE _e IN ${ENTIDADES_IDS}) AND 'contratante' IN UNNEST(roles_mintic)`
-    : `'${entidadId}' IN UNNEST(entidades_mintic) AND 'contratante' IN UNNEST(roles_mintic)`;
+
+// Sector Ambiente: filtra por NIT de entidad directamente
+const AMBIENTE_NITS = "('830025267','830115395','900467239')";
+const AMBIENTE_NIT_MAP = {
+  sector_ambiente:       `nit_entidad IN ('830025267','830115395','900467239')`,
+  sector_ambiente_mads:  `nit_entidad = '830115395'`,
+  sector_ambiente_anla:  `nit_entidad = '900467239'`,
+  sector_ambiente_fonam: `nit_entidad = '830025267'`,
+};
+const baseFilter = (entidadId) => {
+  if (entidadId === 'sector')
+    return `EXISTS(SELECT 1 FROM UNNEST(entidades_mintic) AS _e WHERE _e IN ${ENTIDADES_IDS}) AND 'contratante' IN UNNEST(roles_mintic)`;
+  if (AMBIENTE_NIT_MAP[entidadId])
+    return AMBIENTE_NIT_MAP[entidadId];
+  return `'${entidadId}' IN UNNEST(entidades_mintic) AND 'contratante' IN UNNEST(roles_mintic)`;
+};
 
 // ─── KPIs comparativos Duque vs Petro ────────────────────────────────────────
 export async function kpisComparativos(entidadId) {
