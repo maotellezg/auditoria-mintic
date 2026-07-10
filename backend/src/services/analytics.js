@@ -18,16 +18,32 @@ const PETRO_DESDE = '2022-08-07';
 const TABLE = `\`${PROJECT_ID}.${DATASET}.secop_ii_contratos\``;
 
 /**
- * Serializa resultados de BigQuery convirtiendo Date → string y BigInt → Number.
+ * Serializa resultados de BigQuery:
+ * - BigInt → Number
+ * - Date → string ISO
+ * - Objetos {value: x} de BigQuery (BigQueryInt, BigQueryNumeric) → Number o String
+ * - null/undefined → null
  */
+function serializeValue(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'bigint') return Number(v);
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  // BigQuery devuelve números grandes como objetos {value: "12345678.90"}
+  if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 1 && 'value' in v) {
+    const n = Number(v.value);
+    return isNaN(n) ? String(v.value) : n;
+  }
+  if (Array.isArray(v)) return v.map(serializeValue);
+  if (typeof v === 'object') {
+    const out = {};
+    for (const k of Object.keys(v)) out[k] = serializeValue(v[k]);
+    return out;
+  }
+  return v;
+}
+
 function serialize(rows) {
-  return JSON.parse(
-    JSON.stringify(rows, (_, v) => {
-      if (typeof v === 'bigint') return Number(v);
-      if (v instanceof Date) return v.toISOString().slice(0, 10);
-      return v;
-    })
-  );
+  return rows.map(row => serializeValue(row));
 }
 
 async function runQuery(sql) {
