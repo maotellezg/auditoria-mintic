@@ -2,17 +2,33 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, ExternalLink, RefreshCw, Download, AlertTriangle, Filter, X, Building2, Handshake, Database } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-// ─── Config de entidades ─────────────────────────────────────────────────────
-const ENTIDADES = [
-  { id: 'mintic', nombre: 'MinTIC',  color: '#FF6900', bg: '#FFF4EC', icono: '🏛️', nit: '899999053', desc: 'Ministerio TIC' },
-  { id: 'ane',    nombre: 'ANE',     color: '#214E92', bg: '#EBF1FB', icono: '📡', nit: '900334265', desc: 'Agencia Nacional del Espectro' },
-  { id: 'crc',    nombre: 'CRC',     color: '#0D7C3D', bg: '#E8F7EE', icono: '⚖️', nit: '830002593', desc: 'Comisión de Regulación de Comunicaciones' },
-  { id: 'and',    nombre: 'AND',     color: '#7B2D8B', bg: '#F5EBF8', icono: '💻', nit: '901144049', desc: 'Agencia Nacional Digital' },
-  { id: 'futic',  nombre: 'FUTIC',   color: '#C0392B', bg: '#FDECEA', icono: '💰', nit: '8001316486', desc: 'Fondo Único TIC' },
-  { id: 'rtvc',   nombre: 'RTVC',    color: '#E67E22', bg: '#FEF5EC', icono: '📺', nit: '900002583', desc: 'Sistema de Medios Públicos' },
-  { id: '472',    nombre: '4-72',    color: '#16A085', bg: '#E8F8F5', icono: '📮', nit: '900062917', desc: 'Servicios Postales Nacionales' },
-  { id: 'cpe',    nombre: 'CPE',     color: '#1565C0', bg: '#E3F2FD', icono: '💻', nit: '830079479', desc: 'Computadores para Educar' },
-];
+// ─── Config de entidades por sector ────────────────────────────────────────────────────────
+const SECTOR_SECOP_CONFIG = {
+  tic: {
+    titulo: 'SECTOR ADMINISTRATIVO DE TECNOLOGÍAS DE LA INFORMACIÓN Y LAS COMUNICACIONES — SECOP',
+    entidades: [
+      { id: 'mintic', nombre: 'MinTIC',  color: '#FF6900', bg: '#FFF4EC', icono: '🏗️', nit: '899999053',  desc: 'Ministerio TIC' },
+      { id: 'ane',    nombre: 'ANE',     color: '#214E92', bg: '#EBF1FB', icono: '📡', nit: '900334265',  desc: 'Agencia Nacional del Espectro' },
+      { id: 'crc',    nombre: 'CRC',     color: '#0D7C3D', bg: '#E8F7EE', icono: '⚖️', nit: '830002593',  desc: 'Comisión de Regulación de Comunicaciones' },
+      { id: 'and',    nombre: 'AND',     color: '#7B2D8B', bg: '#F5EBF8', icono: '💻', nit: '901144049',  desc: 'Agencia Nacional Digital' },
+      { id: 'futic',  nombre: 'FUTIC',   color: '#C0392B', bg: '#FDECEA', icono: '💰', nit: '8001316486', desc: 'Fondo Único TIC' },
+      { id: 'rtvc',   nombre: 'RTVC',    color: '#E67E22', bg: '#FEF5EC', icono: '📺', nit: '900002583',  desc: 'Sistema de Medios Públicos' },
+      { id: '472',    nombre: '4-72',    color: '#16A085', bg: '#E8F8F5', icono: '📮', nit: '900062917',  desc: 'Servicios Postales Nacionales' },
+      { id: 'cpe',    nombre: 'CPE',     color: '#1565C0', bg: '#E3F2FD', icono: '💻', nit: '830079479',  desc: 'Computadores para Educar' },
+    ],
+  },
+  ambiente: {
+    titulo: 'SECTOR AMBIENTE Y DESARROLLO SOSTENIBLE — SECOP',
+    entidades: [
+      { id: 'mads',  nombre: 'Min. Ambiente', color: '#15803D', bg: '#DCFCE7', icono: '🌿', nit: '830115395', desc: 'Ministerio de Ambiente y Desarrollo Sostenible' },
+      { id: 'anla',  nombre: 'ANLA',          color: '#0E7490', bg: '#CFFAFE', icono: '📜', nit: '900467239', desc: 'Autoridad Nacional de Licencias Ambientales' },
+      { id: 'fonam', nombre: 'FONAM',         color: '#7C3AED', bg: '#EDE9FE', icono: '💰', nit: '830025267', desc: 'Fondo Nacional Ambiental' },
+    ],
+  },
+};
+
+// Backward-compat alias usado internamente
+const ENTIDADES = SECTOR_SECOP_CONFIG.tic.entidades;
 
 const FUENTES = [
   { id: 'secop_ii_contratos', label: 'SECOP II — Contratos',  shortLabel: 'Contratos',     icono: '📄', color: '#214E92', desc: 'Contratos electrónicos firmados · jbjy-vk9h' },
@@ -560,7 +576,8 @@ function ContratoPanel({ entidad, fuente, currentUser }) {
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export default function SecopView() {
+export default function SecopView({ sector = 'tic' }) {
+  const cfg = SECTOR_SECOP_CONFIG[sector] || SECTOR_SECOP_CONFIG.tic;
   const { currentUser } = useAuth();
   const [entidadActiva, setEntidadActiva] = useState(null);
   const [fuenteActiva, setFuenteActiva]   = useState(FUENTES[0]);
@@ -581,7 +598,7 @@ export default function SecopView() {
 
       <div>
         <h2 style={{ fontSize:'1.1rem', fontWeight:800, color:'var(--text-main)', margin:0, lineHeight:1.3 }}>
-          📋 SECTOR ADMINISTRATIVO DE TECNOLOGÍAS DE LA INFORMACIÓN Y LAS COMUNICACIONES — SECOP
+          📋 {cfg.titulo}
         </h2>
         <p style={{ color:'var(--text-secondary)', fontSize:'0.82rem', margin:'4px 0 0' }}>
           3 fuentes de datos · desde <strong>2018-08-07</strong> · <span style={{ background:'#EBF1FB', color:'#214E92', borderRadius:'5px', padding:'1px 7px', fontWeight:700, fontSize:'0.75rem' }}>🗄️ Datos desde BigQuery</span>
@@ -590,7 +607,7 @@ export default function SecopView() {
 
       {/* Selector de entidades */}
       <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
-        {ENTIDADES.map(ent => {
+        {cfg.entidades.map(ent => {
           const activo = entidadActiva?.id === ent.id;
           return (
             <button key={ent.id} onClick={() => { setEntidadActiva(ent); setResumen(null); }} title={ent.desc}
