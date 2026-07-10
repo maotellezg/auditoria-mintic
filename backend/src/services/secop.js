@@ -150,6 +150,25 @@ export const ENTIDADES_MINTIC = [
     nombreCompleto: 'Computadores para Educar',
     nombreCorto: 'COMPUTADORES PARA EDUCAR',
     icono: '💻'
+  },
+  // ── Sector Ambiente ──────────────────────────────────────────────────────────
+  {
+    id: 'mads', nombre: 'Min. Ambiente', nit: '830115395', color: '#15803D',
+    nombreCompleto: 'Ministerio de Ambiente y Desarrollo Sostenible',
+    nombreCorto: 'MINISTERIO DE AMBIENTE',
+    icono: '🌿'
+  },
+  {
+    id: 'anla', nombre: 'ANLA', nit: '900467239', color: '#0E7490',
+    nombreCompleto: 'Autoridad Nacional de Licencias Ambientales',
+    nombreCorto: 'AUTORIDAD NACIONAL DE LICENCIAS',
+    icono: '📜'
+  },
+  {
+    id: 'fonam', nombre: 'FONAM', nit: '830025267', color: '#7C3AED',
+    nombreCompleto: 'Fondo Nacional Ambiental',
+    nombreCorto: 'FONDO NACIONAL AMBIENTAL',
+    icono: '💰'
   }
 ];
 
