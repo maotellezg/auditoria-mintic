@@ -1639,7 +1639,7 @@ function AnalisisViewInner() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
                         <tr style={{ background: '#F8FAFC' }}>
-                          {['Tipo de Contrato','Gobierno','Contratos','Valor Total','Valor Promedio'].map(h => (
+                          {['Tipo de Contrato','Año','Gobierno','Contratos','Valor Total','Valor Promedio'].map(h => (
                             <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #E8ECF4', fontWeight: 700, color: '#374151' }}>{h}</th>
                           ))}
                         </tr>
@@ -1648,10 +1648,11 @@ function AnalisisViewInner() {
                         {directosNPS.porTipo.map((r, i) => (
                           <tr key={i} style={{ borderBottom: '1px solid #F3F4F6', background: i%2===0?'#fff':'#FAFBFC' }}>
                             <td style={{ padding: '10px 12px', fontWeight:600, maxWidth:250 }}>{r.tipo_de_contrato || '(Sin tipo)'}</td>
+                            <td style={{ padding: '10px 12px', fontWeight:700, color:'#374151' }}>{r.anio}</td>
                             <td style={{ padding: '10px 12px' }}>
                               <span style={{ background: r.gobierno==='Duque'?'#214E92':'#0D7C3D', color:'#fff', borderRadius:6, padding:'2px 10px', fontSize:12, fontWeight:700 }}>{r.gobierno}</span>
                             </td>
-                            <td style={{ padding: '10px 12px' }}>{Number(r.n_contratos).toLocaleString('es-CO')}</td>
+                            <td style={{ padding: '10px 12px' }}>{Number(r.n_contratos||0).toLocaleString('es-CO')}</td>
                             <td style={{ padding: '10px 12px', fontWeight:700, color:'#15234E' }}>{COP(r.valor_total)}</td>
                             <td style={{ padding: '10px 12px' }}>{COP(r.valor_promedio)}</td>
                           </tr>

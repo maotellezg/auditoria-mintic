@@ -540,7 +540,8 @@ export async function directosNoPrestacion(entidadId) {
   // 2. Top tipos de contrato por valor
   const sqlTipos = `
     SELECT
-      tipo_de_contrato,
+      IFNULL(tipo_de_contrato, 'Sin clasificar') AS tipo_de_contrato,
+      EXTRACT(YEAR FROM fecha_de_firma) AS anio,
       CASE WHEN fecha_de_firma < '${PETRO_DESDE}' THEN 'Duque' ELSE 'Petro' END AS gobierno,
       COUNT(*) AS n_contratos,
       SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
@@ -548,9 +549,9 @@ export async function directosNoPrestacion(entidadId) {
     FROM ${TABLE}
     WHERE ${f} AND ${NPS_FILTER}
       AND fecha_de_firma >= '${DUQUE_DESDE}'
-    GROUP BY tipo_de_contrato, gobierno
+    GROUP BY tipo_de_contrato, anio, gobierno
     ORDER BY valor_total DESC
-    LIMIT 40
+    LIMIT 80
   `;
 
   // 3. Top proveedores directos no-PS gobierno Petro
