@@ -580,8 +580,8 @@ export default function SecopView() {
     <div style={{ display:'flex', flexDirection:'column', gap:'18px', minHeight:'100%' }}>
 
       <div>
-        <h2 style={{ fontSize:'1.35rem', fontWeight:800, color:'var(--text-main)', margin:0 }}>
-          📋 Contratación Pública MinTic — SECOP
+        <h2 style={{ fontSize:'1.1rem', fontWeight:800, color:'var(--text-main)', margin:0, lineHeight:1.3 }}>
+          📋 SECTOR ADMINISTRATIVO DE TECNOLOGÍAS DE LA INFORMACIÓN Y LAS COMUNICACIONES — SECOP
         </h2>
         <p style={{ color:'var(--text-secondary)', fontSize:'0.82rem', margin:'4px 0 0' }}>
           3 fuentes de datos · desde <strong>2018-08-07</strong> · <span style={{ background:'#EBF1FB', color:'#214E92', borderRadius:'5px', padding:'1px 7px', fontWeight:700, fontSize:'0.75rem' }}>🗄️ Datos desde BigQuery</span>

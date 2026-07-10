@@ -62,7 +62,7 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword 
             onClick={() => setActiveTab('secop')}
           >
             <Building2 size={20} />
-            <span>Contratación SECOP</span>
+            <span>Sector TIC — SECOP</span>
           </div>
         </li>
 
@@ -82,7 +82,7 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword 
             onClick={() => setActiveTab('analisis')}
           >
             <BarChart2 size={20} />
-            <span>📊 Análisis</span>
+            <span>📊 Análisis Sector TIC</span>
           </div>
         </li>
 

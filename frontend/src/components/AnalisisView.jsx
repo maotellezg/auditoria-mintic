@@ -44,7 +44,8 @@ class ErrorBoundary extends React.Component {
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const ENTIDADES = [
-  { id: 'mintic', nombre: 'MinTIC', color: '#FF6900', nit: '899999053', icono: '🏛️' },
+  { id: 'sector', nombre: 'SECTOR COMPLETO', color: '#15234E', nit: 'TODAS', icono: '🏅' },
+  { id: 'mintic', nombre: 'MinTIC', color: '#FF6900', nit: '899999053', icono: '🏗️' },
   { id: 'ane',    nombre: 'ANE',    color: '#214E92', nit: '900334265', icono: '📡' },
   { id: 'crc',    nombre: 'CRC',    color: '#0D7C3D', nit: '830002593', icono: '⚖️' },
   { id: 'and',    nombre: 'AND',    color: '#7B2D8B', nit: '901144049', icono: '💻' },
@@ -535,7 +536,7 @@ function TablaRepetidos({ rows = [] }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 function AnalisisViewInner() {
   const { currentUser } = useAuth();
-  const [entidadId, setEntidadId] = useState('mintic');
+  const [entidadId, setEntidadId] = useState('sector');
   const [activeTab, setActiveTab] = useState('resumen');
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState('');
@@ -984,11 +985,11 @@ function AnalisisViewInner() {
         boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
       }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#15234E' }}>
-            📊 Dashboard Analítico — Comparativo Duque vs Petro
+          <h1 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#15234E', lineHeight: 1.3 }}>
+            📊 ANÁLISIS SECTOR ADMINISTRATIVO DE TECNOLOGÍAS DE LA INFORMACIÓN Y LAS COMUNICACIONES
           </h1>
           <p style={{ margin: 0, fontSize: 12, color: '#6B7280', marginTop: 2 }}>
-            Detección de corrupción por análisis estadístico de contratación pública
+            Comparativo Duque vs Petro — Detección de corrupción por análisis estadístico de contratación pública
           </p>
         </div>
         {/* PDF Buttons */}
