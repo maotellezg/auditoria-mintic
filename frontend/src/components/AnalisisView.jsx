@@ -643,8 +643,13 @@ function AnalisisViewInner() {
     }
   }, [currentUser]);
 
-  // Re-fetch when entity changes OR when currentUser becomes available
+  // Re-fetch when entity changes: reset paneles de detalle y cargar datos principales
   useEffect(() => {
+    // Limpiar paneles de detalle — datos de entidad anterior ya no son válidos
+    setPsDetalle(null);
+    setPsError(null);
+    setDirectosNPS(null);
+    setNpsError(null);
     if (currentUser) fetchAll(entidadId);
     else setLoading(false);
   }, [entidadId, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
