@@ -446,13 +446,34 @@ export async function prestacionServiciosDetalle(entidadId) {
   `;
 
   const ENTIDADES_MINTIC = "('mintic','ane','crc','and','futic','rtvc','472','cpe')";
+  const AMBIENTE_NITS_REP = "('830025267','830115395','900467239')";
+  const isAmbiente = entidadId.startsWith('sector_ambiente');
 
-  // Genera SQL de repetidos con filtro de tipo-doc opcional
-  const mkRepetidos = (docF = '') => `
+  // Para Ambiente: agrupa por nit_entidad (no por entidades_mintic tag)
+  const mkRepetidos = (docF = '') => isAmbiente ? `
     SELECT
       t.documento_proveedor,
       MAX(t.proveedor_adjudicado) AS nombre,
-      MAX(IFNULL(t.tipo_doc_proveedor,'\u2014')) AS tipo_doc,
+      MAX(IFNULL(t.tipo_doc_proveedor,'—')) AS tipo_doc,
+      COUNT(DISTINCT t.nit_entidad) AS n_entidades,
+      COUNT(*) AS n_contratos,
+      SUM(SAFE_CAST(t.valor_del_contrato AS FLOAT64)) AS valor_total,
+      STRING_AGG(DISTINCT t.nit_entidad ORDER BY t.nit_entidad LIMIT 10) AS entidades
+    FROM ${TABLE} t
+    WHERE ${PS_FILTER}
+      AND t.fecha_de_firma >= '${PETRO_DESDE}'
+      AND t.documento_proveedor IS NOT NULL
+      AND t.nit_entidad IN ${AMBIENTE_NITS_REP}
+      ${docF ? `AND ${docF}` : ''}
+    GROUP BY t.documento_proveedor
+    HAVING COUNT(DISTINCT t.nit_entidad) > 1
+    ORDER BY valor_total DESC
+    LIMIT 100
+  ` : `
+    SELECT
+      t.documento_proveedor,
+      MAX(t.proveedor_adjudicado) AS nombre,
+      MAX(IFNULL(t.tipo_doc_proveedor,'—')) AS tipo_doc,
       COUNT(DISTINCT ent) AS n_entidades,
       COUNT(*) AS n_contratos,
       SUM(SAFE_CAST(t.valor_del_contrato AS FLOAT64)) AS valor_total,
