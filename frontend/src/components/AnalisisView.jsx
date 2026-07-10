@@ -491,6 +491,47 @@ function TablaTopGanadores({ rows = [], titulo = '' }) {
   );
 }
 
+// ─── Tabla repetidos reutilizable ────────────────────────────────────────────
+function TablaRepetidos({ rows = [] }) {
+  if (!rows.length) return <div style={{ color: '#9CA3AF', padding: '20px', textAlign: 'center', fontSize: 13 }}>Sin datos para este filtro</div>;
+  return (
+    <>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: '#FEF2F2' }}>
+              {['#','Nombre','Documento','Tipo Doc','Entidades','Contratos','Valor Total','Entidades Detalle'].map(h => (
+                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #FECACA', fontWeight: 700, color: '#991B1B' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 50).map((r, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid #FEF2F2', background: i%2===0?'#fff':'#FFFBFB' }}>
+                <td style={{ padding: '10px 12px', color:'#9CA3AF' }}>{i+1}</td>
+                <td style={{ padding: '10px 12px', fontWeight:700, maxWidth:180 }}>{r.nombre}</td>
+                <td style={{ padding: '10px 12px', fontFamily:'monospace', fontSize:12, color:'#6B7280' }}>{r.documento_proveedor}</td>
+                <td style={{ padding: '8px 10px' }}>
+                  <span style={{ background: (r.tipo_doc||'').toUpperCase()==='NIT'?'#EFF6FF':'#FFF7ED', color: (r.tipo_doc||'').toUpperCase()==='NIT'?'#1D4ED8':'#92400E', borderRadius:4, padding:'2px 8px', fontSize:11, fontWeight:700 }}>
+                    {r.tipo_doc || '—'}
+                  </span>
+                </td>
+                <td style={{ padding: '10px 12px' }}>
+                  <span style={{ background: r.n_entidades>=3?'#C0392B':'#E67E22', color:'#fff', borderRadius:6, padding:'2px 8px', fontWeight:700, fontSize:12 }}>{r.n_entidades}</span>
+                </td>
+                <td style={{ padding: '10px 12px' }}>{Number(r.n_contratos||0).toLocaleString('es-CO')}</td>
+                <td style={{ padding: '10px 12px', fontWeight:700, color:'#C0392B' }}>{COP(r.valor_total)}</td>
+                <td style={{ padding: '10px 12px', fontSize:11, color:'#6B7280', maxWidth:200 }}>{r.entidades}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8 }}>Mostrando {Math.min(50, rows.length)} de {rows.length} registros</p>
+    </>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 function AnalisisViewInner() {
   const { currentUser } = useAuth();
@@ -1445,37 +1486,25 @@ function AnalisisViewInner() {
                 </div>
 
 
-                {/* 2. Personas que se repiten entre entidades */}
+                {/* 2. Personas que se repiten entre entidades — TODOS */}
                 <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
-                  <h3 style={{ color: '#C0392B', marginBottom: 4 }}>🔄 Personas Repetidas Entre Entidades (Petro)</h3>
-                  <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 16 }}>Contratistas que tienen contratos de prestación de servicios en más de una entidad del sector MinTIC durante el gobierno Petro. Alta concentración puede indicar nómina paralela coordinada.</p>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                      <thead>
-                        <tr style={{ background: '#FEF2F2' }}>
-                          {['#','Nombre','NIT/Doc','Entidades','Contratos','Valor Total','Entidades Detalle'].map(h => (
-                            <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #FECACA', fontWeight: 700, color: '#991B1B' }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {psDetalle.repetidos.slice(0,50).map((r, i) => (
-                          <tr key={i} style={{ borderBottom: '1px solid #FEF2F2', background: i%2===0?'#fff':'#FFFBFB' }}>
-                            <td style={{ padding: '10px 12px', color:'#9CA3AF' }}>{i+1}</td>
-                            <td style={{ padding: '10px 12px', fontWeight:700, maxWidth:180 }}>{r.nombre}</td>
-                            <td style={{ padding: '10px 12px', fontFamily:'monospace', fontSize:12, color:'#6B7280' }}>{r.documento_proveedor}</td>
-                            <td style={{ padding: '10px 12px' }}>
-                              <span style={{ background: r.n_entidades>=3?'#C0392B':'#E67E22', color:'#fff', borderRadius:6, padding:'2px 8px', fontWeight:700, fontSize:12 }}>{r.n_entidades}</span>
-                            </td>
-                            <td style={{ padding: '10px 12px' }}>{r.n_contratos}</td>
-                            <td style={{ padding: '10px 12px', fontWeight:700, color:'#C0392B' }}>{COP(r.valor_total)}</td>
-                            <td style={{ padding: '10px 12px', fontSize:11, color:'#6B7280', maxWidth:200 }}>{r.entidades}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8 }}>Mostrando {Math.min(50, psDetalle.repetidos.length)} de {psDetalle.repetidos.length} personas repetidas</p>
-                  </div>
+                  <h3 style={{ color: '#C0392B', marginBottom: 4 }}>🔄 Personas Repetidas Entre Entidades — Todos (Petro)</h3>
+                  <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 16 }}>Contratistas con PS en más de una entidad MinTIC durante el gobierno Petro. Alta concentración puede indicar nómina paralela coordinada.</p>
+                  <TablaRepetidos rows={psDetalle.repetidos || []} />
+                </div>
+
+                {/* 2b. Repetidos NIT */}
+                <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', borderLeft: '4px solid #214E92' }}>
+                  <h3 style={{ color: '#214E92', marginBottom: 4 }}>🏢 Repetidos — Solo NIT (Personas Jurídicas)</h3>
+                  <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 16 }}>Empresas que contratan prestación de servicios en múltiples entidades del sector.</p>
+                  <TablaRepetidos rows={psDetalle.repetidosNIT || []} />
+                </div>
+
+                {/* 2c. Repetidos No-NIT */}
+                <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', borderLeft: '4px solid #C0392B' }}>
+                  <h3 style={{ color: '#C0392B', marginBottom: 4 }}>🧑 Repetidos — Sin NIT (Personas Naturales)</h3>
+                  <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 16 }}>⚠️ Personas naturales que aparecen en PS en múltiples entidades. Indicador directo de <strong>nómina paralela coordinada entre entidades</strong>.</p>
+                  <TablaRepetidos rows={psDetalle.repetidosNoNIT || []} />
                 </div>
 
                 {/* 3. Contratistas Duque que continúan en 2026 */}

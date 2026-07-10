@@ -430,11 +430,13 @@ export async function prestacionServiciosDetalle(entidadId) {
   `;
 
   const ENTIDADES_MINTIC = "('mintic','ane','crc','and','futic','rtvc','472','cpe')";
-  const sqlRepetidos = `
+
+  // Genera SQL de repetidos con filtro de tipo-doc opcional
+  const mkRepetidos = (docF = '') => `
     SELECT
       t.documento_proveedor,
       MAX(t.proveedor_adjudicado) AS nombre,
-      MAX(IFNULL(t.tipo_doc_proveedor,'—')) AS tipo_doc,
+      MAX(IFNULL(t.tipo_doc_proveedor,'\u2014')) AS tipo_doc,
       COUNT(DISTINCT ent) AS n_entidades,
       COUNT(*) AS n_contratos,
       SUM(SAFE_CAST(t.valor_del_contrato AS FLOAT64)) AS valor_total,
@@ -445,6 +447,7 @@ export async function prestacionServiciosDetalle(entidadId) {
       AND t.documento_proveedor IS NOT NULL
       AND 'contratante' IN UNNEST(t.roles_mintic)
       AND ent IN ${ENTIDADES_MINTIC}
+      ${docF ? `AND ${docF}` : ''}
     GROUP BY t.documento_proveedor
     HAVING COUNT(DISTINCT ent) > 1
     ORDER BY valor_total DESC
@@ -488,7 +491,8 @@ export async function prestacionServiciosDetalle(entidadId) {
   const [
     porAnio, porAnioNIT, porAnioNoNIT,
     topGanadores, topGanadoresNIT, topGanadoresNoNIT,
-    repetidos, continuanDuque, totalPetro
+    repetidos, repetidosNIT, repetidosNoNIT,
+    continuanDuque, totalPetro
   ] = await Promise.all([
     runQuery(mkAnual()),
     runQuery(mkAnual(NIT_F)),
@@ -496,12 +500,14 @@ export async function prestacionServiciosDetalle(entidadId) {
     runQuery(mkTop()),
     runQuery(mkTop(NIT_F)),
     runQuery(mkTop(NONIT_F)),
-    runQuery(sqlRepetidos),
+    runQuery(mkRepetidos()),
+    runQuery(mkRepetidos(NIT_F)),
+    runQuery(mkRepetidos(NONIT_F)),
     runQuery(sqlContinuanDuque),
     runQuery(sqlTotalPetro),
   ]);
 
-  return { porAnio, porAnioNIT, porAnioNoNIT, topGanadores, topGanadoresNIT, topGanadoresNoNIT, repetidos, continuanDuque, totalPetro };
+  return { porAnio, porAnioNIT, porAnioNoNIT, topGanadores, topGanadoresNIT, topGanadoresNoNIT, repetidos, repetidosNIT, repetidosNoNIT, continuanDuque, totalPetro };
 }
 
 // ─── DIRECTOS NO PRESTACIÓN — análisis completo ───────────────────────────────
