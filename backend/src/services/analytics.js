@@ -387,9 +387,11 @@ export async function prestacionServiciosDetalle(entidadId) {
   const f = baseFilter(entidadId);
   const PS_FILTER = `(LOWER(tipo_de_contrato) LIKE '%prestaci%' OR LOWER(tipo_de_contrato) LIKE '%servicios%')
                      AND LOWER(modalidad_de_contratacion) LIKE '%directa%'`;
+  const NIT_F   = `UPPER(IFNULL(tipo_doc_proveedor,'')) = 'NIT'`;
+  const NONIT_F = `UPPER(IFNULL(tipo_doc_proveedor,'')) != 'NIT'`;
 
-  // 1. Por año: cantidad y valores Duque vs Petro
-  const sqlAnual = `
+  // Genera SQL anual con filtro de tipo-doc opcional
+  const mkAnual = (docF = '') => `
     SELECT
       EXTRACT(YEAR FROM fecha_de_firma) AS anio,
       CASE WHEN fecha_de_firma < '${PETRO_DESDE}' THEN 'Duque' ELSE 'Petro' END AS gobierno,
@@ -399,19 +401,40 @@ export async function prestacionServiciosDetalle(entidadId) {
       AVG(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_promedio
     FROM ${TABLE}
     WHERE ${f} AND ${PS_FILTER}
+      ${docF ? `AND ${docF}` : ''}
       AND fecha_de_firma IS NOT NULL
       AND fecha_de_firma >= '2021-08-07'
     GROUP BY anio, gobierno
     ORDER BY anio
   `;
 
-  // 2. Personas que se repiten en múltiples entidades MinTIC (gobierno Petro)
-  // Usamos UNNEST(entidades_mintic) para obtener la entidad de cada contrato
+  // Genera SQL top-ganadores con filtro de tipo-doc opcional
+  const mkTop = (docF = '') => `
+    SELECT
+      documento_proveedor,
+      MAX(proveedor_adjudicado) AS nombre,
+      MAX(IFNULL(tipo_doc_proveedor, '—')) AS tipo_doc,
+      COUNT(*) AS n_contratos,
+      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
+      AVG(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_promedio,
+      MIN(EXTRACT(YEAR FROM fecha_de_firma)) AS primer_anio,
+      MAX(EXTRACT(YEAR FROM fecha_de_firma)) AS ultimo_anio
+    FROM ${TABLE}
+    WHERE ${f} AND ${PS_FILTER}
+      ${docF ? `AND ${docF}` : ''}
+      AND fecha_de_firma >= '${PETRO_DESDE}'
+      AND documento_proveedor IS NOT NULL
+    GROUP BY documento_proveedor
+    ORDER BY valor_total DESC
+    LIMIT 50
+  `;
+
   const ENTIDADES_MINTIC = "('mintic','ane','crc','and','futic','rtvc','472','cpe')";
   const sqlRepetidos = `
     SELECT
       t.documento_proveedor,
       MAX(t.proveedor_adjudicado) AS nombre,
+      MAX(IFNULL(t.tipo_doc_proveedor,'—')) AS tipo_doc,
       COUNT(DISTINCT ent) AS n_entidades,
       COUNT(*) AS n_contratos,
       SUM(SAFE_CAST(t.valor_del_contrato AS FLOAT64)) AS valor_total,
@@ -428,11 +451,11 @@ export async function prestacionServiciosDetalle(entidadId) {
     LIMIT 100
   `;
 
-  // 3. Contratistas Duque que continúan activos en 2026
   const sqlContinuanDuque = `
     SELECT
       documento_proveedor,
       MAX(proveedor_adjudicado) AS nombre,
+      MAX(IFNULL(tipo_doc_proveedor,'—')) AS tipo_doc,
       COUNT(*) AS n_contratos_duque,
       SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_duque,
       MAX(fecha_de_firma) AS ultima_firma_duque,
@@ -450,27 +473,6 @@ export async function prestacionServiciosDetalle(entidadId) {
     LIMIT 200
   `;
 
-  // 4. Top 50 mayores ganadores gobierno Petro
-  const sqlTopGanadores = `
-    SELECT
-      documento_proveedor,
-      MAX(proveedor_adjudicado) AS nombre,
-      COUNT(*) AS n_contratos,
-      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
-      AVG(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_promedio,
-      MIN(EXTRACT(YEAR FROM fecha_de_firma)) AS primer_anio,
-      MAX(EXTRACT(YEAR FROM fecha_de_firma)) AS ultimo_anio,
-      1 AS n_entidades
-    FROM ${TABLE}
-    WHERE ${f} AND ${PS_FILTER}
-      AND fecha_de_firma >= '${PETRO_DESDE}'
-      AND documento_proveedor IS NOT NULL
-    GROUP BY documento_proveedor
-    ORDER BY valor_total DESC
-    LIMIT 50
-  `;
-
-  // 5. Total acumulado Petro por año
   const sqlTotalPetro = `
     SELECT
       EXTRACT(YEAR FROM fecha_de_firma) AS anio,
@@ -483,15 +485,23 @@ export async function prestacionServiciosDetalle(entidadId) {
     GROUP BY anio ORDER BY anio
   `;
 
-  const [porAnio, repetidos, continuanDuque, topGanadores, totalPetro] = await Promise.all([
-    runQuery(sqlAnual),
+  const [
+    porAnio, porAnioNIT, porAnioNoNIT,
+    topGanadores, topGanadoresNIT, topGanadoresNoNIT,
+    repetidos, continuanDuque, totalPetro
+  ] = await Promise.all([
+    runQuery(mkAnual()),
+    runQuery(mkAnual(NIT_F)),
+    runQuery(mkAnual(NONIT_F)),
+    runQuery(mkTop()),
+    runQuery(mkTop(NIT_F)),
+    runQuery(mkTop(NONIT_F)),
     runQuery(sqlRepetidos),
     runQuery(sqlContinuanDuque),
-    runQuery(sqlTopGanadores),
     runQuery(sqlTotalPetro),
   ]);
 
-  return { porAnio, repetidos, continuanDuque, topGanadores, totalPetro };
+  return { porAnio, porAnioNIT, porAnioNoNIT, topGanadores, topGanadoresNIT, topGanadoresNoNIT, repetidos, continuanDuque, totalPetro };
 }
 
 // ─── DIRECTOS NO PRESTACIÓN — análisis completo ───────────────────────────────
