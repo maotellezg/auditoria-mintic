@@ -664,3 +664,67 @@ export async function directosNoPrestacion(entidadId) {
 
   return { porAnio, porTipo, topProveedores, topContratos, kpis: kpis[0] || {} };
 }
+
+
+// --- INFORMES ESPECIALES PETRO (Cualquier Modalidad) -------------------------
+export async function informesEspecialesPetro(entidadId) {
+  const f = baseFilter(entidadId);
+  
+  const sqlTopContratos = ` 
+    SELECT 
+      referencia_del_contrato,
+      objeto_del_contrato,
+      proveedor_adjudicado,
+      tipo_de_contrato,
+      modalidad_de_contratacion,
+      fecha_de_firma,
+      SAFE_CAST(valor_del_contrato AS FLOAT64) AS valor_del_contrato,
+      url_secop
+    FROM ${TABLE}
+    WHERE ${f}
+      AND fecha_de_firma >= ''
+    ORDER BY SAFE_CAST(valor_del_contrato AS FLOAT64) DESC
+    LIMIT 50
+  `;
+
+  const sqlTopValor = ` 
+    SELECT
+      documento_proveedor,
+      MAX(proveedor_adjudicado) AS nombre,
+      COUNT(*) AS n_contratos,
+      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
+      MAX(IFNULL(tipo_doc_proveedor,'—')) AS tipo_doc
+    FROM ${TABLE}
+    WHERE ${f}
+      AND fecha_de_firma >= ''
+      AND documento_proveedor IS NOT NULL
+    GROUP BY documento_proveedor
+    ORDER BY valor_total DESC
+    LIMIT 50
+  `;
+
+  const sqlTopCantidad = ` 
+    SELECT
+      documento_proveedor,
+      MAX(proveedor_adjudicado) AS nombre,
+      COUNT(*) AS n_contratos,
+      SUM(SAFE_CAST(valor_del_contrato AS FLOAT64)) AS valor_total,
+      MAX(IFNULL(tipo_doc_proveedor,'—')) AS tipo_doc
+    FROM ${TABLE}
+    WHERE ${f}
+      AND fecha_de_firma >= ''
+      AND documento_proveedor IS NOT NULL
+    GROUP BY documento_proveedor
+    ORDER BY n_contratos DESC
+    LIMIT 50
+  `;
+
+  const [topContratos, topValor, topCantidad] = await Promise.all([
+    runQuery(sqlTopContratos),
+    runQuery(sqlTopValor),
+    runQuery(sqlTopCantidad)
+  ]);
+
+  return { topContratos, topValor, topCantidad };
+}
+

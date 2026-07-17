@@ -15,7 +15,7 @@ import { fetchContratante, countContratante, fetchProveedor, countProveedor, nor
 import { sincronizarTodo } from './services/secopSync.js';
 import { initBigQuery, queryBQ, querySecopBQ, resumenEntidadBQ, DATASET_ID } from './services/bigquery.js';
 import { indexarContratosEnRAG } from './services/bqRagIndexer.js';
-import { kpisComparativos, serieMensual, tiposContrato, modalidades, topContratistas, prestacionServicios, heatmapMensual, alertasRiesgo, topContratosValor, prestacionServiciosDetalle, directosNoPrestacion } from './services/analytics.js';
+import { kpisComparativos, serieMensual, tiposContrato, modalidades, topContratistas, prestacionServicios, heatmapMensual, alertasRiesgo, topContratosValor, prestacionServiciosDetalle, directosNoPrestacion, informesEspecialesPetro } from './services/analytics.js';
 
 
 
@@ -2366,6 +2366,12 @@ app.get('/api/analytics/prestacion-detalle/:entidadId', checkUser, async (req, r
 app.get('/api/analytics/directos-no-ps/:entidadId', checkUser, async (req, res) => {
   try { res.json(await directosNoPrestacion(req.params.entidadId)); }
   catch (e) { console.error('[analytics/directos-no-ps]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+/** GET /api/analytics/informes-petro/:entidadId — top contratos, proveedores valor/cantidad (solo Petro, todas las modalidades) */
+app.get('/api/analytics/informes-petro/:entidadId', checkUser, async (req, res) => {
+  try { res.json(await informesEspecialesPetro(req.params.entidadId)); }
+  catch (e) { console.error('[analytics/informes-petro]', e.message); res.status(500).json({ error: e.message }); }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

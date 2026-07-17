@@ -586,6 +586,7 @@ function AnalisisViewInner({ sector = 'tic' }) {
   const [heatmap, setHeatmap] = useState([]);
   const [alertas, setAlertas] = useState([]);
   const [topContratos, setTopContratos] = useState([]);
+  const [informesPetro, setInformesPetro] = useState(null);
   const [psDetalle, setPsDetalle] = useState(null);
   const [psError, setPsError] = useState(null);
   const [directosNPS, setDirectosNPS] = useState(null);
@@ -645,7 +646,7 @@ function AnalisisViewInner({ sector = 'tic' }) {
         }
       };
 
-      const [kpisR, serieR, tiposR, modsR, contratistasR, prestacionR, heatmapR, alertasR, topR] =
+      const [kpisR, serieR, tiposR, modsR, contratistasR, prestacionR, heatmapR, alertasR, topR, petroR] =
         await Promise.all([
           safeJson(`/api/analytics/kpis/${eid}`),
           safeJson(`/api/analytics/serie-mensual/${eid}`),
@@ -656,6 +657,7 @@ function AnalisisViewInner({ sector = 'tic' }) {
           safeJson(`/api/analytics/heatmap/${eid}`),
           safeJson(`/api/analytics/alertas/${eid}`),
           safeJson(`/api/analytics/top-contratos/${eid}`),
+          safeJson(`/api/analytics/informes-petro/${eid}`),
         ]);
 
       setKpis(kpisR ? (Array.isArray(kpisR) ? kpisR[0] : kpisR) : null);
@@ -667,6 +669,7 @@ function AnalisisViewInner({ sector = 'tic' }) {
       setHeatmap(Array.isArray(heatmapR) ? heatmapR : []);
       setAlertas(Array.isArray(alertasR) ? alertasR : []);
       setTopContratos(Array.isArray(topR) ? topR : []);
+      setInformesPetro(petroR || null);
 
       if (!kpisR) setError('El backend no devolvió KPIs. Verifica que BigQuery tenga datos para esta entidad.');
       else setError(null);
@@ -1611,6 +1614,115 @@ function AnalisisViewInner({ sector = 'tic' }) {
                   <TablaTopGanadores rows={psDetalle.topGanadoresNoNIT || []} />
                 </div>
 
+              </div>
+            )}
+
+            {/* ══════════════ NUEVO: INFORMES ESPECIALES PETRO (CUALQUIER MODALIDAD) ══════════════ */}
+            {informesPetro && (
+              <div style={{ marginTop: 40, borderTop: '2px dashed #E5E7EB', paddingTop: 40 }}>
+                <div style={{ textAlign: 'center', marginBottom: 32 }}>
+                  <h2 style={{ color: '#0D7C3D', fontSize: 28, fontWeight: 800, margin: 0 }}>📊 Informes Especiales — Gobierno Petro</h2>
+                  <p style={{ color: '#6B7280', fontSize: 15, marginTop: 8 }}>
+                    Análisis de <strong>todas las modalidades de contratación</strong> (Licitaciones, Directa, Mínima Cuantía, etc.) desde el 7 de agosto de 2022.
+                  </p>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
+                  
+                  {/* 1. TOP CONTRATOS INDIVIDUALES MÁS ALTOS */}
+                  <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', borderLeft: '4px solid #0D7C3D' }}>
+                    <h3 style={{ color: '#0D7C3D', marginBottom: 4 }}>💰 1. Contratos Individuales de Mayor Valor</h3>
+                    <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 16 }}>Los contratos más cuantiosos firmados durante este gobierno.</p>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ background: '#E8F7EE' }}>
+                            {['#','Referencia','Objeto','Contratista','Modalidad','Valor','Fecha','SECOP'].map(h => (
+                              <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #BBF7D0', fontWeight: 700, color: '#065F2B' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(informesPetro.topContratos || []).map((r, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #EFF6FF', background: i%2===0?'#fff':'#F8FAFF' }}>
+                              <td style={{ padding: '10px 12px', color:'#9CA3AF' }}>{i+1}</td>
+                              <td style={{ padding: '10px 12px', fontFamily:'monospace', fontSize:11, color:'#6B7280' }}>{(r.referencia_del_contrato||'').slice(0,15)}...</td>
+                              <td style={{ padding: '10px 12px', maxWidth: 200, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }} title={r.objeto_del_contrato}>{r.objeto_del_contrato}</td>
+                              <td style={{ padding: '10px 12px', fontWeight:700 }}>{r.proveedor_adjudicado}</td>
+                              <td style={{ padding: '10px 12px', fontSize:11, color:'#4B5563' }}>{r.modalidad_de_contratacion}</td>
+                              <td style={{ padding: '10px 12px', fontWeight:800, color:'#0D7C3D' }}>{COP(r.valor_del_contrato)}</td>
+                              <td style={{ padding: '10px 12px' }}>{FMT(r.fecha_de_firma)}</td>
+                              <td style={{ padding: '10px 12px' }}>
+                                {r.url_secop && (
+                                  <a href={r.url_secop} target="_blank" rel="noreferrer" style={{ color:'#2563EB', textDecoration:'none' }}>SECOP ↗</a>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* 2. PROVEEDORES MÁS BENEFICIADOS POR VALOR */}
+                  <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', borderLeft: '4px solid #E67E22' }}>
+                    <h3 style={{ color: '#E67E22', marginBottom: 4 }}>🏆 2. Proveedores con Mayor Valor Adjudicado</h3>
+                    <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 16 }}>Suma total del valor de todos sus contratos en este periodo.</p>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ background: '#FEF5EC' }}>
+                            {['#','Contratista','NIT/CC','Tipo','Nº Contratos','Valor Total Acumulado'].map(h => (
+                              <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #FDE0C4', fontWeight: 700, color: '#B95E0A' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(informesPetro.topValor || []).map((r, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #EFF6FF', background: i%2===0?'#fff':'#FDF8F3' }}>
+                              <td style={{ padding: '10px 12px', color:'#9CA3AF' }}>{i+1}</td>
+                              <td style={{ padding: '10px 12px', fontWeight:700 }}>{r.nombre}</td>
+                              <td style={{ padding: '10px 12px', fontFamily:'monospace' }}>{r.documento_proveedor}</td>
+                              <td style={{ padding: '10px 12px', color:'#6B7280' }}>{r.tipo_doc}</td>
+                              <td style={{ padding: '10px 12px', textAlign:'center', fontWeight:600 }}>{r.n_contratos}</td>
+                              <td style={{ padding: '10px 12px', fontWeight:800, color:'#E67E22', fontSize:14 }}>{COP(r.valor_total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* 3. PROVEEDORES CON MAYOR CANTIDAD DE CONTRATOS */}
+                  <div style={{ background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', borderLeft: '4px solid #16A085' }}>
+                    <h3 style={{ color: '#16A085', marginBottom: 4 }}>📈 3. Proveedores con Mayor Cantidad de Contratos</h3>
+                    <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 16 }}>Ranking por volumen de contratos firmados (sin importar el monto).</p>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ background: '#E8F8F5' }}>
+                            {['#','Contratista','NIT/CC','Tipo','Nº Contratos','Valor Total Acumulado'].map(h => (
+                              <th key={h} style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #A3E4D7', fontWeight: 700, color: '#0E6655' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(informesPetro.topCantidad || []).map((r, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #EFF6FF', background: i%2===0?'#fff':'#F2FBF9' }}>
+                              <td style={{ padding: '10px 12px', color:'#9CA3AF' }}>{i+1}</td>
+                              <td style={{ padding: '10px 12px', fontWeight:700 }}>{r.nombre}</td>
+                              <td style={{ padding: '10px 12px', fontFamily:'monospace' }}>{r.documento_proveedor}</td>
+                              <td style={{ padding: '10px 12px', color:'#6B7280' }}>{r.tipo_doc}</td>
+                              <td style={{ padding: '10px 12px', textAlign:'center', fontWeight:800, color:'#16A085', fontSize:15 }}>{r.n_contratos}</td>
+                              <td style={{ padding: '10px 12px', fontWeight:600 }}>{COP(r.valor_total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
               </div>
             )}
           </div>
