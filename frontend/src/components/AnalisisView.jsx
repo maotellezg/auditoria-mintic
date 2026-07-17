@@ -73,6 +73,16 @@ const SECTOR_CONFIG = {
       { id: 'sector_ambiente_fonam', nombre: 'FONAM',          color: '#7C3AED', nit: '830025267', icono: '💰' },
     ],
   },
+  aerocivil: {
+    nombre: 'SECTOR AEROCIVIL',
+    icono: '✈️',
+    color: '#0284C7',
+    defaultEntidad: 'sector_aerocivil',
+    entidades: [
+      { id: 'sector_aerocivil', nombre: 'SECTOR COMPLETO', color: '#0284C7', nit: 'TODAS', icono: '🏅' },
+      { id: 'sector_aerocivil_aerocivil', nombre: 'Aerocivil', color: '#0284C7', nit: '899999059', icono: '✈️' },
+    ],
+  },
 };
 
 // Backward compat: ENTIDADES array para sector TIC

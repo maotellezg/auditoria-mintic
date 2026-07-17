@@ -111,6 +111,31 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenChangePassword 
           </div>
         </li>
 
+        {/* ── Sector Aerocivil ── */}
+        <li style={{ padding: '12px 16px 4px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Sector Aerocivil
+        </li>
+
+        <li>
+          <div
+            className={`sidebar-link ${activeTab === 'secop_aerocivil' ? 'active' : ''}`}
+            onClick={() => setActiveTab('secop_aerocivil')}
+          >
+            <Building2 size={20} />
+            <span>✈️ Sector Aerocivil — SECOP</span>
+          </div>
+        </li>
+
+        <li>
+          <div
+            className={`sidebar-link ${activeTab === 'analisis_aerocivil' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analisis_aerocivil')}
+          >
+            <BarChart2 size={20} />
+            <span>📊 Análisis Sector Aerocivil</span>
+          </div>
+        </li>
+
         <li>
           <div 
             className={`sidebar-link ${activeTab === 'auditoria' ? 'active' : ''}`}

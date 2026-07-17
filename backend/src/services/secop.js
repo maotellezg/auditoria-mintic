@@ -169,6 +169,13 @@ export const ENTIDADES_MINTIC = [
     nombreCompleto: 'Fondo Nacional Ambiental',
     nombreCorto: 'FONDO NACIONAL AMBIENTAL',
     icono: '💰'
+  },
+  // ── Sector Aerocivil ─────────────────────────────────────────────────────────
+  {
+    id: 'aerocivil', nombre: 'Aerocivil', nit: '899999059', color: '#0284C7',
+    nombreCompleto: 'Unidad Administrativa Especial de Aeronáutica Civil',
+    nombreCorto: 'AERONAUTICA CIVIL',
+    icono: '✈️'
   }
 ];
 

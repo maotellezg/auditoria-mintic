@@ -25,6 +25,12 @@ const SECTOR_SECOP_CONFIG = {
       { id: 'fonam', nombre: 'FONAM',         color: '#7C3AED', bg: '#EDE9FE', icono: '💰', nit: '830025267', desc: 'Fondo Nacional Ambiental' },
     ],
   },
+  aerocivil: {
+    titulo: 'SECTOR AEROCIVIL — SECOP',
+    entidades: [
+      { id: 'aerocivil', nombre: 'Aerocivil', color: '#0284C7', bg: '#E0F2FE', icono: '✈️', nit: '899999059', desc: 'Aeronáutica Civil' },
+    ],
+  },
 };
 
 // Backward-compat alias usado internamente

@@ -211,6 +211,10 @@ function AppContent() {
         return <SecopView sector="ambiente" />;
       case 'analisis_ambiente':
         return <AnalisisView sector="ambiente" />;
+      case 'secop_aerocivil':
+        return <SecopView sector="aerocivil" />;
+      case 'analisis_aerocivil':
+        return <AnalisisView sector="aerocivil" />;
       case 'configuracion':
         return userRole === 'administrador' ? (
           <SettingsView />

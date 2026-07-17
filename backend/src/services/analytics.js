@@ -63,11 +63,21 @@ const AMBIENTE_NIT_MAP = {
   sector_ambiente_anla:  `nit_entidad = '900467239'`,
   sector_ambiente_fonam: `nit_entidad = '830025267'`,
 };
+
+// Sector Aerocivil
+const AEROCIVIL_NITS = "('899999059')";
+const AEROCIVIL_NIT_MAP = {
+  sector_aerocivil:             `nit_entidad = '899999059'`,
+  sector_aerocivil_aerocivil:   `nit_entidad = '899999059'`,
+};
+
 const baseFilter = (entidadId) => {
   if (entidadId === 'sector')
     return `EXISTS(SELECT 1 FROM UNNEST(entidades_mintic) AS _e WHERE _e IN ${ENTIDADES_IDS}) AND 'contratante' IN UNNEST(roles_mintic)`;
   if (AMBIENTE_NIT_MAP[entidadId])
     return AMBIENTE_NIT_MAP[entidadId];
+  if (AEROCIVIL_NIT_MAP[entidadId])
+    return AEROCIVIL_NIT_MAP[entidadId];
   return `'${entidadId}' IN UNNEST(entidades_mintic) AND 'contratante' IN UNNEST(roles_mintic)`;
 };
 
@@ -447,10 +457,15 @@ export async function prestacionServiciosDetalle(entidadId) {
 
   const ENTIDADES_MINTIC = "('mintic','ane','crc','and','futic','rtvc','472','cpe')";
   const AMBIENTE_NITS_REP = "('830025267','830115395','900467239')";
+  const AEROCIVIL_NITS_REP = "('899999059')";
   const isAmbiente = entidadId.startsWith('sector_ambiente');
+  const isAerocivil = entidadId.startsWith('sector_aerocivil');
 
-  // Para Ambiente: agrupa por nit_entidad (no por entidades_mintic tag)
-  const mkRepetidos = (docF = '') => isAmbiente ? `
+  // Para Ambiente y Aerocivil: agrupa por nit_entidad (no por entidades_mintic tag)
+  const isNitSector = isAmbiente || isAerocivil;
+  const nits_rep = isAmbiente ? AMBIENTE_NITS_REP : (isAerocivil ? AEROCIVIL_NITS_REP : '');
+
+  const mkRepetidos = (docF = '') => isNitSector ? `
     SELECT
       t.documento_proveedor,
       MAX(t.proveedor_adjudicado) AS nombre,
@@ -463,7 +478,7 @@ export async function prestacionServiciosDetalle(entidadId) {
     WHERE ${PS_FILTER}
       AND t.fecha_de_firma >= '${PETRO_DESDE}'
       AND t.documento_proveedor IS NOT NULL
-      AND t.nit_entidad IN ${AMBIENTE_NITS_REP}
+      AND t.nit_entidad IN ${nits_rep}
       ${docF ? `AND ${docF}` : ''}
     GROUP BY t.documento_proveedor
     HAVING COUNT(DISTINCT t.nit_entidad) > 1
